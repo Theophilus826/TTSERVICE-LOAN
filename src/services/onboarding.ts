@@ -1,4 +1,4 @@
-import api from "./api";
+import API from "./Api";
 
 export type OnboardingStep =
   | "KYC"
@@ -57,7 +57,7 @@ export interface OnboardingStatus {
 
 const onboardingApi = {
   async getStatus(): Promise<OnboardingStatus> {
-    const response = await api.get(
+    const response = await API.get(
       "/onboarding/status",
     );
 

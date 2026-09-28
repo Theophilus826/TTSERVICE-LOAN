@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 
-import API from "../services/API";
+import API from "../services/Api";
 
 interface LedgerUser {
   _id: string;

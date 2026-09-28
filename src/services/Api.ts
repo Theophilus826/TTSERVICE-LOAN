@@ -16,16 +16,25 @@ interface ImportMeta {
 // ENVIRONMENT
 // =========================================================
 //
-// Vite:
+// Local:
 //   VITE_API_URL=http://localhost:5000/api
 //
 // Production:
-//   VITE_API_URL=https://api.yourdomain.com/api
+//   VITE_API_URL=https://tofads-loan.onrender.com
 //
+// If VITE_API_URL is not provided, localhost is used.
+// =========================================================
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5000/api";
+
+// =========================================================
+// BACKEND FALLBACK
+// =========================================================
+
+const API_FALLBACK_URL =
+  "https://tofads-loan.onrender.com";
 
 // =========================================================
 // STORAGE
@@ -91,9 +100,51 @@ API.interceptors.request.use(
 API.interceptors.response.use(
   (response) => response,
 
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     const status =
       error.response?.status;
+
+    // -----------------------------------------------------
+    // FALLBACK TO RENDER BACKEND
+    // -----------------------------------------------------
+    //
+    // If localhost is being used and the local backend is
+    // unavailable, retry the same request against Render.
+    //
+    if (
+      !error.response &&
+      API_BASE_URL === "http://localhost:5000/api" &&
+      error.config
+    ) {
+      const originalRequest = error.config;
+
+      try {
+        const token =
+          localStorage.getItem(TOKEN_KEY);
+
+        const fallbackConfig = {
+          ...originalRequest,
+          baseURL: API_FALLBACK_URL,
+          headers: {
+            ...originalRequest.headers,
+            ...(token
+              ? {
+                  Authorization:
+                    `Bearer ${token}`,
+                }
+              : {}),
+          },
+        };
+
+        return await API.request(
+          fallbackConfig,
+        );
+      } catch (fallbackError) {
+        return Promise.reject(
+          fallbackError,
+        );
+      }
+    }
 
     // -----------------------------------------------------
     // UNAUTHORIZED
@@ -151,7 +202,8 @@ API.interceptors.response.use(
 
 export const getApiErrorMessage = (
   error: unknown,
-  fallback = "Something went wrong. Please try again.",
+  fallback =
+    "Something went wrong. Please try again.",
 ): string => {
   if (axios.isAxiosError(error)) {
     const responseData =

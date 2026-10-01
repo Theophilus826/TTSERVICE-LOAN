@@ -1,4 +1,3 @@
-
 import {
   ArrowRight,
   CheckCircle2,
@@ -8,7 +7,12 @@ import {
   WalletCards,
   AlertCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import onboardingApi, {
@@ -52,11 +56,13 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
 
-        const [onboardingResult, loanResult] =
-          await Promise.allSettled([
-            onboardingApi.getStatus(),
-            myLoanApi.getLoanDashboard(),
-          ]);
+        const [
+          onboardingResult,
+          loanResult,
+        ] = await Promise.allSettled([
+          onboardingApi.getStatus(),
+          myLoanApi.getLoanDashboard(),
+        ]);
 
         if (!mounted) {
           return;
@@ -67,8 +73,7 @@ export default function Dashboard() {
         // ---------------------------------------------------
 
         if (
-          onboardingResult.status ===
-          "fulfilled"
+          onboardingResult.status === "fulfilled"
         ) {
           setStatus(
             onboardingResult.value,
@@ -85,8 +90,7 @@ export default function Dashboard() {
         // ---------------------------------------------------
 
         if (
-          loanResult.status ===
-          "fulfilled"
+          loanResult.status === "fulfilled"
         ) {
           setLoanDashboard(
             loanResult.value,
@@ -181,6 +185,7 @@ export default function Dashboard() {
 
   const repaymentActive =
     status?.nextStep === "REPAYMENT" ||
+    status?.repayment?.exists === true ||
     hasActiveLoan;
 
   // =========================================================
@@ -190,8 +195,19 @@ export default function Dashboard() {
   const kycStatus =
     status?.kyc?.status;
 
+  /*
+   * KYC is considered complete only when:
+   *
+   * kyc.completed === true
+   * AND
+   * kyc.status === "VERIFIED"
+   *
+   * This is the hard gate before entering the
+   * loan application.
+   */
   const kycComplete =
-    kycStatus === "VERIFIED";
+    status !== null &&
+    onboardingApi.isKycComplete(status);
 
   const kycSubmitted =
     kycStatus === "SUBMITTED";
@@ -201,22 +217,86 @@ export default function Dashboard() {
   // =========================================================
 
   const bankComplete =
+    status?.bank?.completed === true &&
     status?.bank?.verified === true;
+
+  /*
+   * User can proceed to the loan application
+   * only after KYC is completely verified.
+   *
+   * Bank verification is also required by the
+   * onboarding API helper.
+   */
+  const canProceedToLoan =
+    status !== null &&
+    onboardingApi.canProceedToLoan(status);
+
+  // =========================================================
+  // KYC STEP DISPLAY
+  // =========================================================
+
+  /*
+   * Your OnboardingStatus type does not currently expose
+   * individual KYC steps/currentStep.
+   *
+   * Therefore:
+   *
+   * VERIFIED = all 5 KYC steps completed.
+   *
+   * For incomplete KYC, we show the backend KYC status
+   * instead of inventing a step number.
+   */
+  const kycStepLabel =
+    kycComplete
+      ? "All 5 steps completed"
+      : kycSubmitted
+        ? "Submitted"
+        : kycStatus === "REJECTED"
+          ? "Rejected"
+          : kycStatus === "PENDING"
+            ? "In progress"
+            : "Not started";
+
+  // =========================================================
+  // REPAYMENT STATUS
+  // =========================================================
+
+  const repaymentStatus =
+    status?.repayment?.status ?? null;
+
+  const repaymentScheduleId =
+    status?.repayment
+      ?.repaymentScheduleId ?? null;
+
+  const repaymentStatusLabel =
+    repaymentStatus
+      ? formatStatus(
+          repaymentStatus,
+        )
+      : hasActiveLoan
+        ? formatStatus(
+            activeLoan.status,
+          )
+        : "Not started";
 
   // =========================================================
   // CURRENT STATUS
   // =========================================================
 
   const currentStatusLabel =
-    status?.currentStatus
-      ? formatStatus(
-          status.currentStatus,
-        )
-      : activeLoan
+    repaymentActive
+      ? repaymentStatusLabel
+      : status?.currentStatus
         ? formatStatus(
-            activeLoan.status,
+            status.currentStatus,
           )
-        : null;
+        : activeLoan
+          ? formatStatus(
+              activeLoan.status,
+            )
+          : null;
+
+  void currentStatusLabel;
 
   // =========================================================
   // SUMMARY
@@ -237,7 +317,7 @@ export default function Dashboard() {
     0;
 
   const currency =
-    activeLoan?.repaymentSchedule
+    activeLoan
       ? getRepaymentSchedule(
           activeLoan,
         )?.currency
@@ -257,6 +337,28 @@ export default function Dashboard() {
         return "Start application";
       }
 
+      /*
+       * HARD KYC GATE
+       *
+       * Even if the backend says the next step
+       * is LOAN, the user must return to KYC
+       * until all 5 steps are verified.
+       */
+      if (
+        status.nextStep === "LOAN" &&
+        !kycComplete
+      ) {
+        return "Complete KYC";
+      }
+
+      if (
+        status.nextStep === "LOAN" &&
+        kycComplete &&
+        !bankComplete
+      ) {
+        return "Add bank account";
+      }
+
       switch (status.nextStep) {
         case "KYC":
           return "Complete KYC";
@@ -274,7 +376,7 @@ export default function Dashboard() {
           return "Create mandate";
 
         case "REPAYMENT":
-          return "View loan";
+          return "View repayment";
 
         case "REVIEW":
           return "View application";
@@ -285,6 +387,8 @@ export default function Dashboard() {
     }, [
       hasActiveLoan,
       status,
+      kycComplete,
+      bankComplete,
     ]);
 
   // =========================================================
@@ -292,6 +396,26 @@ export default function Dashboard() {
   // =========================================================
 
   const continueApplication = () => {
+    // -------------------------------------------------------
+    // REPAYMENT
+    // -------------------------------------------------------
+
+    if (
+      repaymentActive &&
+      repaymentScheduleId
+    ) {
+      navigate(
+        `/loans/repayments/${encodeURIComponent(
+          repaymentScheduleId,
+        )}`,
+        {
+          replace: true,
+        },
+      );
+
+      return;
+    }
+
     // -------------------------------------------------------
     // EXISTING ACTIVE LOAN
     // -------------------------------------------------------
@@ -317,6 +441,28 @@ export default function Dashboard() {
     }
 
     // -------------------------------------------------------
+    // HARD KYC GATE
+    // -------------------------------------------------------
+
+    /*
+     * Never allow the user to enter the loan stage
+     * while KYC is incomplete.
+     *
+     * This check happens BEFORE the switch so that
+     * an incorrect backend nextStep cannot bypass KYC.
+     */
+    if (
+      status.nextStep === "LOAN" &&
+      !kycComplete
+    ) {
+      navigate("/kyc", {
+        replace: true,
+      });
+
+      return;
+    }
+
+    // -------------------------------------------------------
     // NEXT STEP
     // -------------------------------------------------------
 
@@ -334,9 +480,32 @@ export default function Dashboard() {
         break;
 
       case "LOAN":
+        /*
+         * KYC is already verified here because of
+         * the hard gate above.
+         *
+         * Still keep this guard as a second safety check.
+         */
+        if (!kycComplete) {
+          navigate("/kyc", {
+            replace: true,
+          });
+
+          return;
+        }
+
+        if (!bankComplete) {
+          navigate("/bank-accounts", {
+            replace: true,
+          });
+
+          return;
+        }
+
         navigate("/loans", {
           replace: true,
         });
+
         break;
 
       case "OFFER":
@@ -365,9 +534,22 @@ export default function Dashboard() {
         break;
 
       case "REPAYMENT":
-        navigate("/my-loans", {
-          replace: true,
-        });
+        if (
+          repaymentScheduleId
+        ) {
+          navigate(
+            `/loans/repayments/${encodeURIComponent(
+              repaymentScheduleId,
+            )}`,
+            {
+              replace: true,
+            },
+          );
+        } else {
+          navigate("/my-loans", {
+            replace: true,
+          });
+        }
         break;
 
       case "REVIEW":
@@ -388,9 +570,23 @@ export default function Dashboard() {
         break;
 
       default:
-        navigate("/loans", {
-          replace: true,
-        });
+        /*
+         * Never default directly to /loans.
+         * KYC must always be verified first.
+         */
+        if (!kycComplete) {
+          navigate("/kyc", {
+            replace: true,
+          });
+        } else if (!bankComplete) {
+          navigate("/bank-accounts", {
+            replace: true,
+          });
+        } else {
+          navigate("/loans", {
+            replace: true,
+          });
+        }
     }
   };
 
@@ -420,8 +616,8 @@ export default function Dashboard() {
 
   const applicationDescription =
     repaymentActive
-      ? `Your loan is currently ${
-          currentStatusLabel ||
+      ? `Your repayment status is ${
+          repaymentStatusLabel ||
           "Active"
         }. Review your repayment details and keep track of your outstanding balance.`
       : mandateActive
@@ -433,9 +629,13 @@ export default function Dashboard() {
             : "A loan offer is available. Review the details and accept or decline it before continuing."
           : reviewActive
             ? "Your application has been submitted. You can view its current status while it is being reviewed."
-            : loanExists
-              ? "Continue to your application to view its current status."
-              : "Complete your verification and banking details before submitting your loan application.";
+            : !kycComplete
+              ? "Complete all 5 KYC verification steps, including Face Verification, before continuing to your loan application."
+              : !bankComplete
+                ? "Verify your bank account before continuing to your loan application."
+                : loanExists
+                  ? "Continue to your application to view its current status."
+                  : "Complete your verification and banking details before submitting your loan application.";
 
   // =========================================================
   // LOADING
@@ -540,8 +740,8 @@ export default function Dashboard() {
 
           <p className="mt-2 text-sm text-slate-500">
             Manage your verification, loan
-            application, and loans from your
-            dashboard.
+            application, repayments, and loans
+            from your dashboard.
           </p>
         </section>
 
@@ -631,6 +831,8 @@ export default function Dashboard() {
             </h3>
 
             <div className="mt-6 space-y-5">
+              {/* KYC */}
+
               <StatusItem
                 icon={
                   <FileCheck2
@@ -639,14 +841,10 @@ export default function Dashboard() {
                 }
                 title="KYC"
                 complete={kycComplete}
-                status={
-                  kycComplete
-                    ? "Verified"
-                    : kycSubmitted
-                      ? "Submitted"
-                      : "Pending"
-                }
+                status={kycStepLabel}
               />
+
+              {/* BANK */}
 
               <StatusItem
                 icon={
@@ -663,6 +861,8 @@ export default function Dashboard() {
                 }
               />
 
+              {/* LOAN */}
+
               <StatusItem
                 icon={
                   <WalletCards
@@ -674,9 +874,15 @@ export default function Dashboard() {
                 status={
                   loanExists
                     ? "Submitted"
-                    : "Pending"
+                    : !kycComplete
+                      ? "Complete KYC first"
+                      : !bankComplete
+                        ? "Verify bank account first"
+                        : "Pending"
                 }
               />
+
+              {/* REVIEW */}
 
               <StatusItem
                 icon={
@@ -697,39 +903,117 @@ export default function Dashboard() {
                         : "Not started"
                 }
               />
+
+              {/* REPAYMENT */}
+
+              <StatusItem
+                icon={
+                  <WalletCards
+                    size={19}
+                  />
+                }
+                title="Repayment"
+                complete={
+                  repaymentActive
+                }
+                status={
+                  repaymentStatus
+                    ? formatStatus(
+                        repaymentStatus,
+                      )
+                    : repaymentActive
+                      ? "Active"
+                      : "Not started"
+                }
+              />
             </div>
           </div>
         </section>
 
         {/* ===================================================
+            REPAYMENT INFORMATION
+        =================================================== */}
+
+        {repaymentActive && (
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Repayment status
+                </p>
+
+                <h3 className="mt-1 text-lg font-bold text-slate-950">
+                  {repaymentStatusLabel}
+                </h3>
+
+                {repaymentScheduleId && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Repayment schedule available
+                  </p>
+                )}
+              </div>
+
+              {repaymentScheduleId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/loans/repayments/${encodeURIComponent(
+                        repaymentScheduleId,
+                      )}`,
+                    )
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  View repayment
+                  <ArrowRight
+                    size={17}
+                  />
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ===================================================
             KYC INFORMATION
         =================================================== */}
 
-        {kycSubmitted &&
-          !kycComplete && (
-            <section className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
-              <div className="flex items-start gap-3">
-                <Clock3
-                  size={20}
-                  className="mt-0.5 text-blue-600"
-                />
+        {!kycComplete && (
+          <section className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <div className="flex items-start gap-3">
+              <Clock3
+                size={20}
+                className="mt-0.5 text-blue-600"
+              />
 
-                <div>
-                  <h3 className="font-semibold text-blue-900">
-                    KYC submitted
-                  </h3>
+              <div>
+                <h3 className="font-semibold text-blue-900">
+                  Complete your KYC
+                </h3>
 
-                  <p className="mt-1 text-sm leading-6 text-blue-800">
-                    Your KYC submission is
-                    being reviewed. You can
-                    continue with the onboarding
-                    process while the review is
-                    pending.
-                  </p>
-                </div>
+                <p className="mt-1 text-sm leading-6 text-blue-800">
+                  Complete all 5 KYC verification
+                  steps, including Face Verification,
+                  before applying for a loan.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("/kyc")
+                  }
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Continue KYC
+                  <ArrowRight
+                    size={16}
+                  />
+                </button>
               </div>
-            </section>
-          )}
+            </div>
+          </section>
+        )}
 
         {/* ===================================================
             ACTIVE LOAN
@@ -1008,7 +1292,7 @@ function StatusItem({
   complete,
   status,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   complete: boolean;
   status: string;
@@ -1112,7 +1396,7 @@ function InfoCard({
   title,
   text,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   text: string;
 }) {
@@ -1204,4 +1488,3 @@ function formatDate(
     },
   ).format(date);
 }
-

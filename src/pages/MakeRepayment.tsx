@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -14,6 +15,7 @@ import { toast } from "react-toastify";
 
 import repaymentApi, {
   type PaymentMethod,
+  type RepaymentAccount,
   type RepaymentSchedule,
 } from "../services/repaymentApi";
 
@@ -24,7 +26,10 @@ import repaymentApi, {
 const roundMoney = (amount: number) =>
   Math.round((Number(amount) + Number.EPSILON) * 100) / 100;
 
-const formatMoney = (amount: number, currency = "NGN") => {
+const formatMoney = (
+  amount: number,
+  currency = "NGN",
+) => {
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency,
@@ -61,13 +66,21 @@ export default function MakeRepayment() {
     repaymentScheduleId?: string;
   }>();
 
-  const [schedule, setSchedule] = useState<RepaymentSchedule | null>(null);
+  const [schedule, setSchedule] =
+    useState<RepaymentSchedule | null>(null);
+
+  const [repaymentAccount, setRepaymentAccount] =
+    useState<RepaymentAccount | null>(null);
 
   const [amount, setAmount] = useState("");
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>("card");
 
   const [loading, setLoading] = useState(true);
+
+  const [loadingWallet, setLoadingWallet] =
+    useState(false);
 
   const [processing, setProcessing] = useState(false);
 
@@ -78,83 +91,144 @@ export default function MakeRepayment() {
   // =========================================================
 
   useEffect(() => {
-  let mounted = true;
+    let mounted = true;
 
-  const loadSchedule = async () => {
-    if (!repaymentScheduleId) {
-      if (mounted) {
-        setError("Repayment schedule ID is missing.");
-        setLoading(false);
-      }
+    const loadSchedule = async () => {
+      if (!repaymentScheduleId) {
+        if (mounted) {
+          setError("Repayment schedule ID is missing.");
+          setLoading(false);
+        }
 
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError("");
-
-      const response =
-        await repaymentApi.getRepaymentSchedule(
-          repaymentScheduleId,
-        );
-
-      if (!response.success || !response.data) {
-        throw new Error(
-          response.message ||
-            "Repayment schedule not found.",
-        );
-      }
-
-      if (!mounted) {
         return;
       }
 
-      setSchedule(response.data);
+      try {
+        setLoading(true);
+        setError("");
 
-      const outstanding = roundMoney(
-        Number(
-          response.data.amountOutstanding || 0,
-        ),
-      );
+        const response =
+          await repaymentApi.getRepaymentSchedule(
+            repaymentScheduleId,
+          );
 
-      if (outstanding > 0) {
-        setAmount(
-          outstanding.toFixed(2),
+        if (!response.success || !response.data) {
+          throw new Error(
+            response.message ||
+              "Repayment schedule not found.",
+          );
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        setSchedule(response.data);
+
+        const outstanding = roundMoney(
+          Number(
+            response.data.amountOutstanding || 0,
+          ),
         );
-      }
-    } catch (err: any) {
-      console.error(
-        "LOAD REPAYMENT SCHEDULE ERROR:",
-        err?.response?.data || err,
-      );
 
-      if (mounted) {
-        setError(
-          err?.response?.data?.message ||
-            err?.message ||
-            "Unable to load repayment schedule.",
+        if (outstanding > 0) {
+          setAmount(outstanding.toFixed(2));
+        }
+      } catch (err: any) {
+        console.error(
+          "LOAD REPAYMENT SCHEDULE ERROR:",
+          err?.response?.data || err,
         );
-      }
-    } finally {
-      if (mounted) {
-        setLoading(false);
-      }
-    }
-  };
 
-  loadSchedule();
+        if (mounted) {
+          setError(
+            err?.response?.data?.message ||
+              err?.message ||
+              "Unable to load repayment schedule.",
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
 
-  return () => {
-    mounted = false;
-  };
-}, [repaymentScheduleId]);
+    loadSchedule();
+
+    return () => {
+      mounted = false;
+    };
+  }, [repaymentScheduleId]);
+
+  // =========================================================
+  // LOAD REPAYMENT WALLET WHEN SELECTED
+  // =========================================================
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadWallet = async () => {
+      if (paymentMethod !== "wallet") {
+        return;
+      }
+
+      try {
+        setLoadingWallet(true);
+
+        const response =
+          await repaymentApi.getRepaymentAccount();
+
+        if (!response.success) {
+          throw new Error(
+            response.message ||
+              "Unable to load repayment account.",
+          );
+        }
+
+        if (mounted) {
+          setRepaymentAccount(
+            response.data || null,
+          );
+        }
+      } catch (err: any) {
+        console.error(
+          "LOAD REPAYMENT ACCOUNT ERROR:",
+          err?.response?.data || err,
+        );
+
+        if (mounted) {
+          setRepaymentAccount(null);
+
+          toast.error(
+            err?.response?.data?.message ||
+              err?.message ||
+              "Unable to load repayment account.",
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoadingWallet(false);
+        }
+      }
+    };
+
+    loadWallet();
+
+    return () => {
+      mounted = false;
+    };
+  }, [paymentMethod]);
 
   // =========================================================
   // VALUES
   // =========================================================
 
-  const outstanding = roundMoney(Number(schedule?.amountOutstanding || 0));
+  const outstanding = roundMoney(
+    Number(
+      schedule?.amountOutstanding || 0,
+    ),
+  );
 
   const paymentAmount = Number(amount);
 
@@ -163,22 +237,62 @@ export default function MakeRepayment() {
     paymentAmount > 0 &&
     paymentAmount <= outstanding;
 
-  const isFullPayment =
-    amountIsValid && roundMoney(paymentAmount) === roundMoney(outstanding);
+  const walletBalance = roundMoney(
+    Number(
+      repaymentAccount?.balance || 0,
+    ),
+  );
+
+  const walletHasEnough =
+    paymentMethod !== "wallet" ||
+    walletBalance >= paymentAmount;
+
+  const walletIsActive =
+    repaymentAccount?.status === "active";
 
   const remainingAfterPayment = useMemo(() => {
     if (!amountIsValid) {
       return outstanding;
     }
 
-    return roundMoney(Math.max(0, outstanding - paymentAmount));
-  }, [amountIsValid, outstanding, paymentAmount]);
+    return roundMoney(
+      Math.max(
+        0,
+        outstanding - paymentAmount,
+      ),
+    );
+  }, [
+    amountIsValid,
+    outstanding,
+    paymentAmount,
+  ]);
+
+  const isFullPayment =
+    amountIsValid &&
+    roundMoney(paymentAmount) ===
+      roundMoney(outstanding);
+
+  // =========================================================
+  // PAYMENT METHOD
+  // =========================================================
+
+  const handlePaymentMethodChange = (
+    method: PaymentMethod,
+  ) => {
+    if (processing) {
+      return;
+    }
+
+    setPaymentMethod(method);
+  };
 
   // =========================================================
   // SUBMIT
   // =========================================================
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
 
     if (!schedule) {
@@ -199,7 +313,10 @@ export default function MakeRepayment() {
       return;
     }
 
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    if (
+      !Number.isFinite(paymentAmount) ||
+      paymentAmount <= 0
+    ) {
       toast.error("Enter a valid repayment amount.");
       return;
     }
@@ -211,6 +328,7 @@ export default function MakeRepayment() {
           schedule.currency,
         )}.`,
       );
+
       return;
     }
 
@@ -223,19 +341,89 @@ export default function MakeRepayment() {
       return;
     }
 
+    // =================================================
+    // WALLET VALIDATION
+    // =================================================
+
+    if (paymentMethod === "wallet") {
+      if (!repaymentAccount) {
+        toast.error(
+          "Your repayment account could not be loaded.",
+        );
+
+        return;
+      }
+
+      if (repaymentAccount.status !== "active") {
+        toast.error(
+          "Your repayment account is not active.",
+        );
+
+        return;
+      }
+
+      if (walletBalance < paymentAmount) {
+        toast.error(
+          `Insufficient wallet balance. Available balance is ${formatMoney(
+            walletBalance,
+            schedule.currency,
+          )}.`,
+        );
+
+        return;
+      }
+    }
+
+    // =================================================
+    // PROCESS
+    // =================================================
+
     try {
       setProcessing(true);
 
-      const response = await repaymentApi.initiateRepayment({
-        repaymentScheduleId: schedule._id,
+      // =================================================
+      // WALLET REPAYMENT
+      // =================================================
 
-        amount: roundMoney(paymentAmount),
+      if (paymentMethod === "wallet") {
+        const response =
+          await repaymentApi.repayFromAccount(
+            schedule._id,
+            roundMoney(paymentAmount),
+          );
 
-        paymentMethod,
-      });
+        if (!response.success) {
+          throw new Error(
+            response.message ||
+              "Unable to complete wallet repayment.",
+          );
+        }
+
+        toast.success(
+          "Repayment completed successfully.",
+        );
+
+        navigate("/loans/repayments/history");
+
+        return;
+      }
+
+      // =================================================
+      // CARD / BANK TRANSFER
+      // =================================================
+
+      const response =
+        await repaymentApi.initiateRepayment({
+          repaymentScheduleId: schedule._id,
+          amount: roundMoney(paymentAmount),
+          paymentMethod,
+        });
 
       if (!response.success) {
-        throw new Error(response.message || "Unable to initialize repayment.");
+        throw new Error(
+          response.message ||
+            "Unable to initialize repayment.",
+        );
       }
 
       const payment = response.data?.payment;
@@ -245,9 +433,13 @@ export default function MakeRepayment() {
       // =================================================
 
       if (payment?.authorizationUrl) {
-        toast.success("Payment initialized. Redirecting...");
+        toast.success(
+          "Payment initialized. Redirecting...",
+        );
 
-        window.location.assign(payment.authorizationUrl);
+        window.location.assign(
+          payment.authorizationUrl,
+        );
 
         return;
       }
@@ -256,16 +448,6 @@ export default function MakeRepayment() {
       // NO AUTHORIZATION URL
       // =================================================
 
-      /*
-       * With the current backend, initiateRepayment
-       * is expected to initialize a provider payment.
-       *
-       * If no authorizationUrl is returned, do not
-       * call makeRepayment() here. The repayment should
-       * only become successful after the provider confirms
-       * payment through your backend callback/webhook.
-       */
-
       toast.info(
         response.message ||
           "Payment has been initialized. Check your payment instructions.",
@@ -273,12 +455,15 @@ export default function MakeRepayment() {
 
       navigate("/loans/repayments/history");
     } catch (err: any) {
-      console.error("INITIATE REPAYMENT ERROR:", err?.response?.data || err);
+      console.error(
+        "INITIATE REPAYMENT ERROR:",
+        err?.response?.data || err,
+      );
 
       toast.error(
         err?.response?.data?.message ||
           err?.message ||
-          "Unable to initialize repayment.",
+          "Unable to process repayment.",
       );
     } finally {
       setProcessing(false);
@@ -293,7 +478,10 @@ export default function MakeRepayment() {
     return (
       <div className="flex min-h-[500px] items-center justify-center">
         <div className="text-center">
-          <Loader2 size={36} className="mx-auto animate-spin text-orange-500" />
+          <Loader2
+            size={36}
+            className="mx-auto animate-spin text-orange-500"
+          />
 
           <p className="mt-3 text-sm text-gray-500">
             Loading repayment details...
@@ -311,14 +499,18 @@ export default function MakeRepayment() {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
-          <AlertCircle size={45} className="mx-auto text-red-400" />
+          <AlertCircle
+            size={45}
+            className="mx-auto text-red-400"
+          />
 
           <h2 className="mt-4 text-xl font-bold text-gray-900">
             Repayment schedule not found
           </h2>
 
           <p className="mt-2 text-sm text-gray-500">
-            {error || "We could not find the repayment schedule for this loan."}
+            {error ||
+              "We could not find the repayment schedule for this loan."}
           </p>
 
           <Link
@@ -337,23 +529,30 @@ export default function MakeRepayment() {
   // ALREADY PAID
   // =========================================================
 
-  if (schedule.status === "paid" || outstanding <= 0) {
+  if (
+    schedule.status === "paid" ||
+    outstanding <= 0
+  ) {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
-          <CheckCircle2 size={50} className="mx-auto text-green-500" />
+          <CheckCircle2
+            size={50}
+            className="mx-auto text-green-500"
+          />
 
           <h2 className="mt-4 text-xl font-bold text-gray-900">
             Loan Fully Repaid
           </h2>
 
           <p className="mt-2 text-sm text-gray-500">
-            This loan has no outstanding repayment balance.
+            This loan has no outstanding
+            repayment balance.
           </p>
 
           <Link
             to="/loans/repayments/history"
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white"
           >
             View Repayment History
           </Link>
@@ -368,13 +567,12 @@ export default function MakeRepayment() {
 
   return (
     <div className="mx-auto max-w-5xl p-6">
-      {/* ===================================================
-          HEADER
-      =================================================== */}
+
+      {/* HEADER */}
 
       <div className="mb-6">
         <Link
-          to={`/loans/repayments/schedule/${repaymentScheduleId}`}
+          to={`/loans/repayments/${repaymentScheduleId}`}
           className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-orange-500"
         >
           <ArrowLeft size={16} />
@@ -387,7 +585,9 @@ export default function MakeRepayment() {
           </div>
 
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Make Repayment</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Make Repayment
+            </h1>
 
             <p className="text-sm text-gray-500">
               Pay your outstanding loan balance
@@ -396,85 +596,106 @@ export default function MakeRepayment() {
         </div>
       </div>
 
-      {/* ===================================================
-          SUMMARY
-      =================================================== */}
+      {/* SUMMARY */}
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <SummaryCard
           label="Total Repayment"
-          value={formatMoney(schedule.totalRepaymentAmount, schedule.currency)}
+          value={formatMoney(
+            schedule.totalRepaymentAmount,
+            schedule.currency,
+          )}
         />
 
         <SummaryCard
           label="Amount Paid"
-          value={formatMoney(schedule.amountPaid, schedule.currency)}
+          value={formatMoney(
+            schedule.amountPaid,
+            schedule.currency,
+          )}
         />
 
         <SummaryCard
           label="Outstanding"
-          value={formatMoney(outstanding, schedule.currency)}
+          value={formatMoney(
+            outstanding,
+            schedule.currency,
+          )}
           highlight
         />
       </div>
 
-      {/* ===================================================
-          LOAN DETAILS
-      =================================================== */}
+      {/* LOAN DETAILS */}
 
       <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Loan Repayment</h2>
+            <h2 className="text-lg font-bold text-gray-900">
+              Loan Repayment
+            </h2>
 
             <p className="text-sm text-gray-500">
-              {typeof schedule.loanApplication === "object"
-                ? schedule.loanApplication?.applicationNumber || "Loan"
+              {typeof schedule.loanApplication ===
+              "object"
+                ? schedule.loanApplication
+                    ?.applicationNumber ||
+                  "Loan"
                 : "Loan"}
             </p>
           </div>
 
           <div className="flex w-fit items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
             <CalendarDays size={14} />
-            Due {formatDate(schedule.finalDueDate)}
+            Due{" "}
+            {formatDate(
+              schedule.finalDueDate,
+            )}
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           <Detail
             label="Principal"
-            value={formatMoney(schedule.principalAmount, schedule.currency)}
+            value={formatMoney(
+              schedule.principalAmount,
+              schedule.currency,
+            )}
           />
 
           <Detail
             label="Interest"
-            value={formatMoney(schedule.totalInterest, schedule.currency)}
+            value={formatMoney(
+              schedule.totalInterest,
+              schedule.currency,
+            )}
           />
 
           <Detail
             label="Fees"
-            value={formatMoney(schedule.totalFees, schedule.currency)}
+            value={formatMoney(
+              schedule.totalFees,
+              schedule.currency,
+            )}
           />
         </div>
       </div>
 
-      {/* ===================================================
-          PAYMENT FORM
-      =================================================== */}
+      {/* PAYMENT FORM */}
 
       <form
         onSubmit={handleSubmit}
         className="rounded-2xl border bg-white p-6 shadow-sm"
       >
-        <h2 className="text-lg font-bold text-gray-900">Payment Details</h2>
+        <h2 className="text-lg font-bold text-gray-900">
+          Payment Details
+        </h2>
 
         <p className="mt-1 text-sm text-gray-500">
-          Choose how much you want to pay and your preferred payment method.
+          Choose how much you want to pay and
+          your preferred payment method.
         </p>
 
-        {/* =================================================
-            AMOUNT
-        ================================================= */}
+        {/* AMOUNT */}
 
         <div className="mt-6">
           <label
@@ -498,9 +719,9 @@ export default function MakeRepayment() {
               max={outstanding}
               step="0.01"
               value={amount}
-              onChange={(event) => {
-                setAmount(event.target.value);
-              }}
+              onChange={(event) =>
+                setAmount(event.target.value)
+              }
               disabled={processing}
               placeholder="Enter amount"
               className="w-full rounded-xl border border-gray-200 py-3 pl-9 pr-4 text-lg font-semibold outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
@@ -509,13 +730,21 @@ export default function MakeRepayment() {
 
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className="text-gray-500">
-              Maximum: {formatMoney(outstanding, schedule.currency)}
+              Maximum:{" "}
+              {formatMoney(
+                outstanding,
+                schedule.currency,
+              )}
             </span>
 
             <button
               type="button"
               disabled={processing}
-              onClick={() => setAmount(outstanding.toFixed(2))}
+              onClick={() =>
+                setAmount(
+                  outstanding.toFixed(2),
+                )
+              }
               className="font-semibold text-orange-500 hover:text-orange-600 disabled:opacity-50"
             >
               Pay full balance
@@ -524,15 +753,17 @@ export default function MakeRepayment() {
 
           {paymentAmount > outstanding && (
             <p className="mt-2 text-sm text-red-600">
-              Amount cannot exceed {formatMoney(outstanding, schedule.currency)}
+              Amount cannot exceed{" "}
+              {formatMoney(
+                outstanding,
+                schedule.currency,
+              )}
               .
             </p>
           )}
         </div>
 
-        {/* =================================================
-            PAYMENT METHODS
-        ================================================= */}
+        {/* PAYMENT METHODS */}
 
         <div className="mt-6">
           <p className="mb-3 text-sm font-semibold text-gray-700">
@@ -544,15 +775,23 @@ export default function MakeRepayment() {
               selected={paymentMethod === "card"}
               label="Card"
               icon={<CreditCard size={20} />}
-              onClick={() => setPaymentMethod("card")}
+              onClick={() =>
+                handlePaymentMethodChange("card")
+              }
               disabled={processing}
             />
 
             <PaymentMethodButton
-              selected={paymentMethod === "bank_transfer"}
+              selected={
+                paymentMethod === "bank_transfer"
+              }
               label="Bank Transfer"
               icon={<Banknote size={20} />}
-              onClick={() => setPaymentMethod("bank_transfer")}
+              onClick={() =>
+                handlePaymentMethodChange(
+                  "bank_transfer",
+                )
+              }
               disabled={processing}
             />
 
@@ -560,69 +799,257 @@ export default function MakeRepayment() {
               selected={paymentMethod === "wallet"}
               label="Wallet"
               icon={<Wallet size={20} />}
-              onClick={() => setPaymentMethod("wallet")}
+              onClick={() =>
+                handlePaymentMethodChange("wallet")
+              }
               disabled={processing}
             />
           </div>
         </div>
 
-        {/* =================================================
-            PAYMENT SUMMARY
-        ================================================= */}
+        {/* WALLET INFORMATION */}
+
+        {paymentMethod === "wallet" && (
+          <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-4">
+            {loadingWallet ? (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Loader2
+                  size={16}
+                  className="animate-spin"
+                />
+
+                Loading repayment wallet...
+              </div>
+            ) : !repaymentAccount ? (
+              <div className="text-sm text-red-600">
+                <p className="font-semibold">
+                  Repayment account unavailable
+                </p>
+
+                <p className="mt-1">
+                  You need an active repayment
+                  account to use Wallet.
+                </p>
+
+                <Link
+                  to="/repayment-account"
+                  className="mt-3 inline-block font-semibold text-orange-600 hover:text-orange-700"
+                >
+                  Open Repayment Account
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-orange-600">
+                      <Wallet size={19} />
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-gray-500">
+                        Available Repayment Wallet
+                      </p>
+
+                      <p className="text-lg font-bold text-gray-900">
+                        {formatMoney(
+                          walletBalance,
+                          repaymentAccount.currency ||
+                            schedule.currency,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      walletIsActive
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}
+                  >
+                    {repaymentAccount.status}
+                  </span>
+                </div>
+
+                {repaymentAccount.accountNumber && (
+                  <div className="mt-4 rounded-lg bg-white p-3">
+                    <p className="text-xs text-gray-500">
+                      Fund this wallet using your
+                      dedicated repayment account
+                    </p>
+
+                    <p className="mt-1 font-semibold text-gray-900">
+                      {repaymentAccount.bankName ||
+                        "Bank"}{" "}
+                      •{" "}
+                      {repaymentAccount.accountNumber}
+                    </p>
+
+                    <Link
+                      to="/repayment-account"
+                      className="mt-2 inline-block text-sm font-semibold text-orange-600 hover:text-orange-700"
+                    >
+                      View account details
+                    </Link>
+                  </div>
+                )}
+
+                {amountIsValid &&
+                  walletBalance < paymentAmount && (
+                    <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                      <p className="font-semibold">
+                        Insufficient wallet balance
+                      </p>
+
+                      <p className="mt-1">
+                        You need{" "}
+                        {formatMoney(
+                          paymentAmount -
+                            walletBalance,
+                          schedule.currency,
+                        )}{" "}
+                        more to make this payment.
+                      </p>
+
+                      <Link
+                        to="/repayment-account"
+                        className="mt-2 inline-block font-semibold underline"
+                      >
+                        Fund your wallet
+                      </Link>
+                    </div>
+                  )}
+
+                {amountIsValid &&
+                  walletBalance >= paymentAmount &&
+                  walletIsActive && (
+                    <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-medium text-green-700">
+                      <CheckCircle2 size={17} />
+
+                      Your wallet has enough balance
+                      for this payment.
+                    </div>
+                  )}
+
+                {!walletIsActive && (
+                  <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                    Your repayment account is{" "}
+                    {repaymentAccount.status}.
+                    Wallet repayment is unavailable.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* PAYMENT SUMMARY */}
 
         <div className="mt-6 rounded-xl bg-gray-50 p-5">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Payment</span>
+            <span className="text-sm text-gray-500">
+              Payment
+            </span>
 
             <span className="font-semibold text-gray-900">
               {formatMoney(
-                Number.isFinite(paymentAmount) ? paymentAmount : 0,
+                Number.isFinite(paymentAmount)
+                  ? paymentAmount
+                  : 0,
                 schedule.currency,
               )}
             </span>
           </div>
 
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-sm text-gray-500">Remaining balance</span>
+            <span className="text-sm text-gray-500">
+              Remaining balance
+            </span>
 
             <span className="font-semibold text-gray-900">
-              {formatMoney(remainingAfterPayment, schedule.currency)}
+              {formatMoney(
+                remainingAfterPayment,
+                schedule.currency,
+              )}
             </span>
           </div>
+
+          {paymentMethod === "wallet" &&
+            repaymentAccount && (
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-sm text-gray-500">
+                  Wallet after payment
+                </span>
+
+                <span className="font-semibold text-gray-900">
+                  {formatMoney(
+                    Math.max(
+                      0,
+                      walletBalance -
+                        paymentAmount,
+                    ),
+                    repaymentAccount.currency ||
+                      schedule.currency,
+                  )}
+                </span>
+              </div>
+            )}
 
           {isFullPayment && (
             <div className="mt-4 flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm font-medium text-green-700">
               <CheckCircle2 size={17} />
-              This payment will fully repay the loan.
+
+              This payment will fully repay the
+              loan.
             </div>
           )}
         </div>
 
-        {/* =================================================
-            SUBMIT
-        ================================================= */}
+        {/* SUBMIT */}
 
         <button
           type="submit"
-          disabled={processing || !amountIsValid}
+          disabled={
+            processing ||
+            !amountIsValid ||
+            (paymentMethod === "wallet" &&
+              (!repaymentAccount ||
+                !walletIsActive ||
+                !walletHasEnough))
+          }
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {processing ? (
             <>
-              <Loader2 size={18} className="animate-spin" />
-              Initializing Payment...
+              <Loader2
+                size={18}
+                className="animate-spin"
+              />
+
+              {paymentMethod === "wallet"
+                ? "Processing Repayment..."
+                : "Initializing Payment..."}
             </>
           ) : (
             <>
-              <CreditCard size={18} />
-              Continue to Payment
+              {paymentMethod === "wallet" ? (
+                <Wallet size={18} />
+              ) : (
+                <CreditCard size={18} />
+              )}
+
+              {paymentMethod === "wallet"
+                ? "Pay from Wallet"
+                : "Continue to Payment"}
             </>
           )}
         </button>
 
         <p className="mt-4 text-center text-xs text-gray-400">
-          You will be redirected to the secure payment provider to complete your
-          repayment.
+          {paymentMethod === "wallet"
+            ? "Your repayment wallet will be debited securely by the server."
+            : "You will be redirected to the secure payment provider to complete your repayment."}
         </p>
       </form>
     </div>
@@ -645,14 +1072,20 @@ function SummaryCard({
   return (
     <div
       className={`rounded-2xl border p-5 shadow-sm ${
-        highlight ? "border-orange-200 bg-orange-50" : "bg-white"
+        highlight
+          ? "border-orange-200 bg-orange-50"
+          : "bg-white"
       }`}
     >
-      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-sm text-gray-500">
+        {label}
+      </p>
 
       <p
         className={`mt-2 text-xl font-bold ${
-          highlight ? "text-orange-600" : "text-gray-900"
+          highlight
+            ? "text-orange-600"
+            : "text-gray-900"
         }`}
       >
         {value}
@@ -665,12 +1098,22 @@ function SummaryCard({
 // DETAIL
 // =========================================================
 
-function Detail({ label, value }: { label: string; value: string }) {
+function Detail({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-xl bg-gray-50 p-4">
-      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-sm text-gray-500">
+        {label}
+      </p>
 
-      <p className="mt-1 font-semibold text-gray-900">{value}</p>
+      <p className="mt-1 font-semibold text-gray-900">
+        {value}
+      </p>
     </div>
   );
 }
@@ -706,9 +1149,16 @@ function PaymentMethodButton({
     >
       {icon}
 
-      <span className="text-sm font-semibold">{label}</span>
+      <span className="text-sm font-semibold">
+        {label}
+      </span>
 
-      {selected && <CheckCircle2 size={17} className="ml-auto" />}
+      {selected && (
+        <CheckCircle2
+          size={17}
+          className="ml-auto"
+        />
+      )}
     </button>
   );
 }

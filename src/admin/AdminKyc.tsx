@@ -1,4 +1,3 @@
-
 import {
   useCallback,
   useEffect,
@@ -11,6 +10,7 @@ import {
   XCircle,
   Eye,
   User,
+  CreditCard,
 } from "lucide-react";
 
 import { toast } from "react-toastify";
@@ -38,6 +38,36 @@ type KycStatus =
   | "under_review"
   | "verified"
   | "rejected";
+
+type DvaStatus =
+  | "pending"
+  | "active"
+  | "failed";
+
+interface RepaymentAccount {
+  _id: string;
+
+  accountNumber?: string | null;
+  accountName?: string | null;
+
+  bankName?: string | null;
+  bankCode?: string | null;
+
+  currency?: string | null;
+
+  balance?: number;
+  totalCredited?: number;
+  totalRepaid?: number;
+
+  status?: "active" | "suspended" | "closed";
+
+  provider?: string | null;
+
+  providerCustomerCode?: string | null;
+  providerAccountId?: string | null;
+
+  dvaStatus?: DvaStatus;
+}
 
 interface Kyc {
   _id: string;
@@ -74,6 +104,10 @@ interface Kyc {
 
   verifiedBy?: string;
 
+  repaymentAccount?: RepaymentAccount | null;
+
+  repaymentAccountProvisioningError?: string | null;
+
   createdAt?: string;
 
   updatedAt?: string;
@@ -85,6 +119,44 @@ interface KycResponse {
   data?: Kyc[];
 }
 
+interface BackfillResponse {
+  success?: boolean;
+  message?: string;
+
+  data?: {
+    total: number;
+    processed: number;
+    provisioned: number;
+    alreadyProvisioned: number;
+    pending: number;
+    failed: number;
+
+    page: number;
+    limit: number;
+    totalPages: number;
+
+    items?: Array<{
+      userId: string;
+      disbursementId?: string;
+
+      status:
+        | "provisioned"
+        | "already_provisioned"
+        | "pending"
+        | "failed"
+        | "unknown";
+
+      accountId?: string;
+
+      accountNumber?: string | null;
+
+      dvaStatus?: DvaStatus | null;
+
+      error?: string;
+    }>;
+  };
+}
+
 /* =========================================================
    COMPONENT
    ========================================================= */
@@ -94,6 +166,11 @@ export default function AdminKyc() {
 
   const [kycs, setKycs] = useState<Kyc[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [
+    provisioningAccounts,
+    setProvisioningAccounts,
+  ] = useState(false);
 
   /* =======================================================
      ERROR MESSAGE
@@ -166,6 +243,85 @@ export default function AdminKyc() {
   }, [loadKyc]);
 
   /* =======================================================
+     PROVISION EXISTING BORROWERS
+     ======================================================= */
+
+  const provisionExistingRepaymentAccounts =
+    async () => {
+      const confirmed = window.confirm(
+        "This will find borrowers with successful historical disbursements and provision missing Paystack repayment accounts.\n\nExisting active or pending accounts will be skipped.\n\nDo you want to continue?"
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setProvisioningAccounts(true);
+
+        const response =
+          await API.post<BackfillResponse>(
+            "/kyc/admin/repayment-accounts/provision-existing",
+            undefined,
+            {
+              params: {
+                page: 1,
+                limit: 100,
+              },
+            }
+          );
+
+        const result =
+          response.data?.data;
+
+        if (!result) {
+          toast.success(
+            response.data?.message ||
+              "Repayment account provisioning completed."
+          );
+
+          return;
+        }
+
+        const {
+          processed,
+          provisioned,
+          alreadyProvisioned,
+          pending,
+          failed,
+        } = result;
+
+        if (failed > 0) {
+          toast.warning(
+            `Processed ${processed}. Provisioned ${provisioned}. Already provisioned ${alreadyProvisioned}. Pending ${pending}. Failed ${failed}.`
+          );
+        } else {
+          toast.success(
+            `Processed ${processed}. Provisioned ${provisioned}. Already provisioned ${alreadyProvisioned}. Pending ${pending}.`
+          );
+        }
+
+        /*
+         * Reload KYC so any repayment-account information
+         * returned by the backend is reflected in the list.
+         */
+        await loadKyc();
+      } catch (error: unknown) {
+        console.error(
+          "Failed to provision repayment accounts:",
+          error
+        );
+
+        toast.error(
+          getErrorMessage(error) ||
+            "Failed to provision repayment accounts"
+        );
+      } finally {
+        setProvisioningAccounts(false);
+      }
+    };
+
+  /* =======================================================
      DATE FORMATTER
      ======================================================= */
 
@@ -231,6 +387,26 @@ export default function AdminKyc() {
   };
 
   /* =======================================================
+     DVA STATUS STYLE
+     ======================================================= */
+
+  const getDvaStatusClass = (
+    status?: DvaStatus | null
+  ): string => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-700";
+
+      case "failed":
+        return "bg-red-100 text-red-700";
+
+      case "pending":
+      default:
+        return "bg-yellow-100 text-yellow-700";
+    }
+  };
+
+  /* =======================================================
      RENDER
      ======================================================= */
 
@@ -240,7 +416,7 @@ export default function AdminKyc() {
           HEADER
           =================================================== */}
 
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
             KYC Applications
@@ -252,23 +428,92 @@ export default function AdminKyc() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void loadKyc()}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-medium shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshCw
-            size={17}
-            className={
-              loading
-                ? "animate-spin"
-                : ""
-            }
-          />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {/* =============================================
+              PROVISION EXISTING REPAYMENT ACCOUNTS
+              ============================================= */}
 
-          Refresh
-        </button>
+          <button
+            type="button"
+            onClick={
+              provisionExistingRepaymentAccounts
+            }
+            disabled={
+              loading ||
+              provisioningAccounts
+            }
+            className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {provisioningAccounts ? (
+              <RefreshCw
+                size={17}
+                className="animate-spin"
+              />
+            ) : (
+              <CreditCard size={17} />
+            )}
+
+            {provisioningAccounts
+              ? "Provisioning..."
+              : "Provision Repayment Accounts"}
+          </button>
+
+          {/* =============================================
+              REFRESH
+              ============================================= */}
+
+          <button
+            type="button"
+            onClick={() => void loadKyc()}
+            disabled={
+              loading ||
+              provisioningAccounts
+            }
+            className="flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-medium shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw
+              size={17}
+              className={
+                loading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* ===================================================
+          REPAYMENT ACCOUNT BACKFILL INFORMATION
+          =================================================== */}
+
+      <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+        <div className="flex gap-3">
+          <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-orange-600" />
+
+          <div>
+            <p className="font-semibold text-orange-900">
+              Existing borrower repayment accounts
+            </p>
+
+            <p className="mt-1 text-sm text-orange-800">
+              Use the button above to provision Paystack
+              dedicated virtual accounts for borrowers who
+              already have successful historical
+              disbursements but do not yet have a repayment
+              account.
+            </p>
+
+            <p className="mt-2 text-xs text-orange-700">
+              Existing active or pending accounts are
+              skipped. Paystack accounts that are still
+              pending will become active after the Paystack
+              webhook is received.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ===================================================
@@ -278,6 +523,7 @@ export default function AdminKyc() {
       {!loading && kycs.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* Total */}
+
           <div className="rounded-2xl bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Total
@@ -289,6 +535,7 @@ export default function AdminKyc() {
           </div>
 
           {/* Pending */}
+
           <div className="rounded-2xl bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Pending Review
@@ -310,6 +557,7 @@ export default function AdminKyc() {
           </div>
 
           {/* Verified */}
+
           <div className="rounded-2xl bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Verified
@@ -327,6 +575,7 @@ export default function AdminKyc() {
           </div>
 
           {/* Rejected */}
+
           <div className="rounded-2xl bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Rejected
@@ -379,104 +628,134 @@ export default function AdminKyc() {
           </div>
         ) : (
           <div className="divide-y">
-            {kycs.map((kyc) => (
-              <div
-                key={kyc._id}
-                className="p-5 transition hover:bg-gray-50"
-              >
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  {/* =====================================
-                      CUSTOMER
-                      ===================================== */}
+            {kycs.map((kyc) => {
+              const repaymentAccount =
+                kyc.repaymentAccount;
 
-                  <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600">
-                      <User size={21} />
-                    </div>
+              return (
+                <div
+                  key={kyc._id}
+                  className="p-5 transition hover:bg-gray-50"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    {/* =================================
+                        CUSTOMER
+                        ================================= */}
 
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-semibold text-gray-900">
-                          {kyc.firstName}{" "}
-                          {kyc.lastName}
-                        </h2>
-
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(
-                            kyc.status
-                          )}`}
-                        >
-                          {formatStatus(
-                            kyc.status
-                          )}
-                        </span>
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                        <User size={21} />
                       </div>
 
-                      <p className="mt-1 break-all text-sm text-gray-500">
-                        {kyc.user?.email ||
-                          "No email"}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="font-semibold text-gray-900">
+                            {kyc.firstName}{" "}
+                            {kyc.lastName}
+                          </h2>
+
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(
+                              kyc.status
+                            )}`}
+                          >
+                            {formatStatus(
+                              kyc.status
+                            )}
+                          </span>
+                        </div>
+
+                        <p className="mt-1 break-all text-sm text-gray-500">
+                          {kyc.user?.email ||
+                            "No email"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* =====================================
-                      DETAILS
-                      ===================================== */}
+                    {/* =================================
+                        DETAILS
+                        ================================= */}
 
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm md:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-gray-400">
-                        ID Type
-                      </p>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm md:grid-cols-3">
+                      <div>
+                        <p className="text-xs text-gray-400">
+                          ID Type
+                        </p>
 
-                      <p className="font-medium text-gray-700">
-                        {kyc.idType}
-                      </p>
-                    </div>
+                        <p className="font-medium text-gray-700">
+                          {kyc.idType}
+                        </p>
+                      </div>
 
-                    <div>
-                      <p className="text-xs text-gray-400">
-                        Submitted
-                      </p>
+                      <div>
+                        <p className="text-xs text-gray-400">
+                          Submitted
+                        </p>
 
-                      <p className="font-medium text-gray-700">
-                        {formatDate(
-                          kyc.submittedAt
+                        <p className="font-medium text-gray-700">
+                          {formatDate(
+                            kyc.submittedAt
+                          )}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-gray-400">
+                          Country
+                        </p>
+
+                        <p className="font-medium text-gray-700">
+                          {kyc.country || "-"}
+                        </p>
+                      </div>
+
+                      {/* Repayment account */}
+
+                      <div>
+                        <p className="text-xs text-gray-400">
+                          Repayment Account
+                        </p>
+
+                        {repaymentAccount ? (
+                          <span
+                            className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getDvaStatusClass(
+                              repaymentAccount.dvaStatus
+                            )}`}
+                          >
+                            {formatStatus(
+                              repaymentAccount.dvaStatus ||
+                                "pending"
+                            )}
+                          </span>
+                        ) : (
+                          <span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">
+                            Not provisioned
+                          </span>
                         )}
-                      </p>
+                      </div>
                     </div>
 
-                    <div>
-                      <p className="text-xs text-gray-400">
-                        Country
-                      </p>
+                    {/* =================================
+                        VIEW
+                        ================================= */}
 
-                      <p className="font-medium text-gray-700">
-                        {kyc.country || "-"}
-                      </p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(
+                          `/admin/kyc/${kyc._id}`
+                        )
+                      }
+                      className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800"
+                    >
+                      <Eye size={17} />
+
+                      View Details
+                    </button>
                   </div>
-
-                  {/* =====================================
-                      VIEW
-                      ===================================== */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(
-                        `/admin/kyc/${kyc._id}`
-                      )
-                    }
-                    className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800"
-                  >
-                    <Eye size={17} />
-
-                    View Details
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

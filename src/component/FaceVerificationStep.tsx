@@ -9,18 +9,10 @@ import {
   startFaceVerification,
 } from "../services/kycApi";
 
-// =========================================================
-// TYPES
-// =========================================================
-
 interface FaceVerificationStepProps {
   isVerified?: boolean;
   onVerified: () => void;
 }
-
-// =========================================================
-// COMPONENT
-// =========================================================
 
 const FaceVerificationStep: React.FC<
   FaceVerificationStepProps
@@ -29,32 +21,55 @@ const FaceVerificationStep: React.FC<
   onVerified,
 }) => {
   const videoRef =
-    useRef<HTMLVideoElement | null>(null);
+    useRef<HTMLVideoElement | null>(
+      null,
+    );
+
+  const canvasRef =
+    useRef<HTMLCanvasElement | null>(
+      null,
+    );
 
   const streamRef =
-    useRef<MediaStream | null>(null);
+    useRef<MediaStream | null>(
+      null,
+    );
 
-  const [cameraStarted, setCameraStarted] =
-    useState(false);
+  const [
+    cameraStarted,
+    setCameraStarted,
+  ] = useState(false);
 
-  const [isVerifying, setIsVerifying] =
-    useState(false);
+  const [
+    verifying,
+    setVerifying,
+  ] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    message,
+    setMessage,
+  ] = useState<string | null>(
+    null,
+  );
 
-  const [message, setMessage] =
-    useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(
+    null,
+  );
 
-  // =======================================================
+  // =========================================================
   // STOP CAMERA
-  // =======================================================
+  // =========================================================
 
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current
         .getTracks()
-        .forEach((track) => track.stop());
+        .forEach((track) => {
+          track.stop();
+        });
 
       streamRef.current = null;
     }
@@ -66,29 +81,33 @@ const FaceVerificationStep: React.FC<
     setCameraStarted(false);
   };
 
-  // =======================================================
+  // =========================================================
   // CLEANUP
-  // =======================================================
+  // =========================================================
 
   useEffect(() => {
     return () => {
       if (streamRef.current) {
         streamRef.current
           .getTracks()
-          .forEach((track) => track.stop());
+          .forEach((track) => {
+            track.stop();
+          });
+
+        streamRef.current = null;
       }
     };
   }, []);
 
-  // =======================================================
+  // =========================================================
   // START CAMERA
-  // =======================================================
+  // =========================================================
 
   const startCamera = async () => {
-    try {
-      setError(null);
-      setMessage(null);
+    setError(null);
+    setMessage(null);
 
+    try {
       if (
         !navigator.mediaDevices ||
         !navigator.mediaDevices.getUserMedia
@@ -102,12 +121,6 @@ const FaceVerificationStep: React.FC<
         await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
-            width: {
-              ideal: 720,
-            },
-            height: {
-              ideal: 720,
-            },
           },
           audio: false,
         });
@@ -123,7 +136,7 @@ const FaceVerificationStep: React.FC<
       setCameraStarted(true);
     } catch (err: any) {
       console.error(
-        "Camera error:",
+        "❌ CAMERA ERROR:",
         err,
       );
 
@@ -131,121 +144,159 @@ const FaceVerificationStep: React.FC<
         err?.message ||
           "Unable to access your camera. Please allow camera permission and try again.",
       );
-
-      setCameraStarted(false);
     }
   };
 
-  // =======================================================
-  // CAPTURE SELFIE
-  // =======================================================
+  // =========================================================
+  // CAPTURE SELFIE AS BLOB
+  // =========================================================
 
-  const captureSelfie = (): string | null => {
-    const video =
-      videoRef.current;
+  const captureSelfie = (): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const video =
+        videoRef.current;
 
-    if (!video) {
-      return null;
-    }
+      const canvas =
+        canvasRef.current;
 
-    if (
-      video.readyState <
-      HTMLMediaElement.HAVE_CURRENT_DATA
-    ) {
-      return null;
-    }
+      if (!video || !canvas) {
+        resolve(null);
+        return;
+      }
 
-    const width =
-      video.videoWidth || 720;
+      if (
+        video.videoWidth === 0 ||
+        video.videoHeight === 0
+      ) {
+        resolve(null);
+        return;
+      }
 
-    const height =
-      video.videoHeight || 720;
+      canvas.width =
+        video.videoWidth;
 
-    const canvas =
-      document.createElement("canvas");
+      canvas.height =
+        video.videoHeight;
 
-    canvas.width = width;
-    canvas.height = height;
+      const context =
+        canvas.getContext("2d");
 
-    const context =
-      canvas.getContext("2d");
+      if (!context) {
+        resolve(null);
+        return;
+      }
 
-    if (!context) {
-      return null;
-    }
+      context.drawImage(
+        video,
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      );
 
-    /*
-     * Mirror the captured image so it matches
-     * what the user sees in the camera preview.
-     */
-    context.translate(width, 0);
-    context.scale(-1, 1);
-
-    context.drawImage(
-      video,
-      0,
-      0,
-      width,
-      height,
-    );
-
-    return canvas.toDataURL(
-      "image/jpeg",
-      0.85,
-    );
+      canvas.toBlob(
+        (blob) => {
+          resolve(blob);
+        },
+        "image/jpeg",
+        0.9,
+      );
+    });
   };
 
-  // =======================================================
-  // VERIFY FACE
-  // =======================================================
+  // =========================================================
+  // UPLOAD SELFIE
+  // =========================================================
 
-  const handleVerification = async () => {
-    if (isVerifying) {
-      return;
-    }
-
+  const verifyFace = async () => {
     setError(null);
     setMessage(null);
 
-    if (!cameraStarted) {
+    const selfieBlob =
+      await captureSelfie();
+
+    if (!selfieBlob) {
       setError(
-        "Please start your camera first.",
+        "Unable to capture your selfie. Please make sure your camera is active and try again.",
       );
 
       return;
     }
 
-    const selfie =
-      captureSelfie();
-
-    if (!selfie) {
-      setError(
-        "Unable to capture your selfie. Please make sure your face is visible and try again.",
-      );
-
-      return;
-    }
+    setVerifying(true);
 
     try {
-      setIsVerifying(true);
+      // -------------------------------------------------------
+      // CREATE IMAGE FILE
+      // -------------------------------------------------------
 
-      setMessage(
-        "Verifying your face. Please wait...",
-      );
-
-      const result =
-        await startFaceVerification(
-          selfie,
+      const selfieFile =
+        new File(
+          [
+            selfieBlob,
+          ],
+          `selfie-${Date.now()}.jpg`,
+          {
+            type: "image/jpeg",
+          },
         );
 
+      // -------------------------------------------------------
+      // CREATE MULTIPART FORM DATA
+      // -------------------------------------------------------
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        "selfie",
+        selfieFile,
+      );
+
+      // -------------------------------------------------------
+      // UPLOAD TO BACKEND
+      // -------------------------------------------------------
+
+      const response =
+        await startFaceVerification(
+          formData,
+        );
+
+      console.log(
+        "=================================",
+      );
+
+      console.log(
+        "📸 SELFIE UPLOAD RESPONSE",
+      );
+
+      console.log(
+        response,
+      );
+
+      console.log(
+        "=================================",
+      );
+
+      const data =
+        response?.data;
+
+      const status =
+        data?.faceVerificationStatus ||
+        data?.status ||
+        "verified";
+
+      // -------------------------------------------------------
+      // SUCCESS
+      // -------------------------------------------------------
+
       if (
-        result?.faceVerificationStatus ===
-        "verified"
+        status === "verified"
       ) {
         stopCamera();
 
         setMessage(
-          "Face verification successful.",
+          "Your selfie was uploaded successfully.",
         );
 
         onVerified();
@@ -253,179 +304,185 @@ const FaceVerificationStep: React.FC<
         return;
       }
 
-      if (
-        result?.faceVerificationStatus ===
-        "pending"
-      ) {
-        stopCamera();
+      // -------------------------------------------------------
+      // FAILED
+      // -------------------------------------------------------
 
-        setMessage(
-          "Face verification is in progress. Please refresh your verification status.",
+      if (
+        status === "failed"
+      ) {
+        setError(
+          data?.faceVerificationReason ||
+            response?.message ||
+            "Unable to save your selfie. Please try again.",
         );
 
         return;
       }
 
+      // -------------------------------------------------------
+      // UNEXPECTED STATUS
+      // -------------------------------------------------------
+
       setError(
-        result?.faceVerificationReason ||
-          "Face verification failed. Please try again.",
+        "Your selfie could not be completed. Please try again.",
       );
     } catch (err: any) {
       console.error(
-        "Face verification error:",
+        "❌ SELFIE UPLOAD ERROR:",
         err,
       );
 
       setError(
-        err?.response?.data?.message ||
+        err?.response?.data
+          ?.message ||
           err?.message ||
-          "Face verification failed. Please try again.",
+          "Unable to upload your selfie. Please try again.",
       );
     } finally {
-      setIsVerifying(false);
+      setVerifying(false);
     }
   };
 
-  // =======================================================
+  // =========================================================
   // ALREADY VERIFIED
-  // =======================================================
+  // =========================================================
 
   if (isVerified) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-          <h3 className="font-semibold text-green-800">
-            Face verification complete
-          </h3>
+      <div className="rounded-xl border border-green-200 bg-green-50 p-6">
+        <h2 className="text-xl font-semibold text-green-700">
+          Selfie Complete
+        </h2>
 
-          <p className="mt-1 text-sm text-green-700">
-            Your identity has been successfully
-            verified.
-          </p>
-        </div>
+        <p className="mt-2 text-sm text-green-600">
+          Your selfie has been successfully
+          submitted.
+        </p>
       </div>
     );
   }
 
-  // =======================================================
-  // UI
-  // =======================================================
+  // =========================================================
+  // RENDER
+  // =========================================================
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">
-          Face Verification
-        </h2>
+    <div className="rounded-xl border bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-semibold">
+        Take Your Selfie
+      </h2>
 
-        <p className="mt-1 text-sm text-gray-600">
-          Take a clear selfie so we can verify
-          your identity.
-        </p>
-      </div>
-
-      {/* =================================================
-          CAMERA
-      ================================================= */}
-
-      <div className="overflow-hidden rounded-xl border bg-black">
-        {cameraStarted ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className="aspect-square w-full object-cover"
-            style={{
-              transform: "scaleX(-1)",
-            }}
-          />
-        ) : (
-          <div className="flex aspect-square w-full items-center justify-center bg-gray-100 p-6 text-center">
-            <div>
-              <p className="font-medium text-gray-700">
-                Camera is not active
-              </p>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Start your camera to continue.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* =================================================
-          ERROR
-      ================================================= */}
+      <p className="mt-2 text-sm text-gray-600">
+        Take a clear picture of yourself.
+        Your selfie will be securely uploaded
+        as part of your identity verification.
+      </p>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {/* =================================================
-          MESSAGE
-      ================================================= */}
-
-      {message && !error && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+      {message && (
+        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
           {message}
         </div>
       )}
 
-      {/* =================================================
+      {/* =====================================================
+          CAMERA
+      ===================================================== */}
+
+      <div className="mt-6 overflow-hidden rounded-xl bg-black">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className="h-auto w-full"
+        />
+      </div>
+
+      <canvas
+        ref={canvasRef}
+        className="hidden"
+      />
+
+      {/* =====================================================
           ACTIONS
-      ================================================= */}
+      ===================================================== */}
 
-      {!cameraStarted ? (
-        <button
-          type="button"
-          onClick={startCamera}
-          disabled={isVerifying}
-          className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Start Camera
-        </button>
-      ) : (
-        <div className="space-y-3">
+      <div className="mt-6 flex flex-wrap gap-3">
+        {!cameraStarted && (
           <button
             type="button"
-            onClick={handleVerification}
-            disabled={isVerifying}
-            className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={startCamera}
+            disabled={verifying}
+            className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isVerifying
-              ? "Verifying..."
-              : "Verify My Face"}
+            Start Camera
           </button>
+        )}
 
-          <button
-            type="button"
-            onClick={stopCamera}
-            disabled={isVerifying}
-            className="w-full rounded-lg border px-4 py-3 font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Stop Camera
-          </button>
-        </div>
-      )}
+        {cameraStarted && (
+          <>
+            <button
+              type="button"
+              onClick={verifyFace}
+              disabled={verifying}
+              className="rounded-lg bg-green-600 px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {verifying
+                ? "Uploading..."
+                : "Take Selfie"}
+            </button>
 
-      {/* =================================================
+            <button
+              type="button"
+              onClick={stopCamera}
+              disabled={verifying}
+              className="rounded-lg border border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Stop Camera
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* =====================================================
           INSTRUCTIONS
-      ================================================= */}
+      ===================================================== */}
 
-      <div className="rounded-lg bg-gray-50 p-4">
-        <p className="text-sm font-medium text-gray-700">
-          For best results:
-        </p>
+      <div className="mt-6 rounded-lg bg-gray-50 p-4">
+        <h3 className="font-medium">
+          Before taking your selfie
+        </h3>
 
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
-          <li>Use good lighting.</li>
-          <li>Look directly at the camera.</li>
-          <li>Keep your whole face visible.</li>
-          <li>Remove anything covering your face.</li>
+          <li>
+            Make sure your face is clearly
+            visible.
+          </li>
+
+          <li>
+            Use good lighting.
+          </li>
+
+          <li>
+            Remove anything covering your
+            face.
+          </li>
+
+          <li>
+            Look directly at the camera.
+          </li>
+
+          <li>
+            Keep your face inside the camera
+            frame.
+          </li>
         </ul>
       </div>
     </div>

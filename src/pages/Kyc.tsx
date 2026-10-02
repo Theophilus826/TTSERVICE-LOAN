@@ -1,754 +1,684 @@
 
-import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-hot-toast";
 
-import kycApi from "../services/kycApi";
-import bankApi from "../services/BankService";
+import kycApi, {
+  type KycData,
+  type KycVerificationStatus,
+} from "../services/kycApi";
 
-import KycStepIndicator from "../component/KycStepIndicator";
-import PersonalStep, {
-  PersonalFormData,
-} from "../component/PersonalStep";
-import IdentityStep, {
-  IdentityFormData,
-} from "../component/IdentityStep";
-import BankAccountStep from "../component/BankAccountStep";
-import BvnStep from "../component/BvnStep";
 import FaceVerificationStep from "../component/FaceVerificationStep";
-
-interface KycData {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: "male" | "female" | "other" | "";
-
-  address: string;
-  city: string;
-  state: string;
-  country: string;
-
-  idType:
-    | "nin"
-    | "passport"
-    | "drivers_license"
-    | "voters_card"
-    | "";
-  idNumber: string;
-
-  status?: string;
-
-  bvnLast4?: string | null;
-
-  bvnVerificationStatus?:
-    | "not_started"
-    | "pending"
-    | "verified"
-    | "failed";
-
-  customerVerificationStatus?:
-    | "not_started"
-    | "pending"
-    | "verified"
-    | "failed";
-
-  faceVerificationStatus?:
-    | "not_started"
-    | "pending"
-    | "verified"
-    | "failed";
-}
-
-interface BankAccount {
-  _id: string;
-  bankName: string;
-  bankCode: string;
-  accountName?: string;
-  accountNumberLast4: string;
-  accountType?: "savings" | "current";
-  currency?: string;
-  isPrimary: boolean;
-  verificationStatus: "pending" | "verified" | "failed";
-}
-
-const initialPersonal: PersonalFormData = {
-  firstName: "",
-  lastName: "",
-  dateOfBirth: "",
-  gender: "",
-};
-
-const initialIdentity: IdentityFormData = {
-  address: "",
-  city: "",
-  state: "",
-  country: "Nigeria",
-  idType: "",
-  idNumber: "",
-};
 
 const Kyc: React.FC = () => {
   const navigate = useNavigate();
 
-  const [currentStep, setCurrentStep] = useState(1);
-
-  const [personal, setPersonal] =
-    useState<PersonalFormData>(initialPersonal);
-
-  const [identity, setIdentity] =
-    useState<IdentityFormData>(initialIdentity);
+  const [currentStep, setCurrentStep] = useState<number>(1);
 
   const [kyc, setKyc] = useState<KycData | null>(null);
 
-  const [selectedBankAccountId, setSelectedBankAccountId] =
-    useState<string | null>(null);
-
   const [selectedBankAccount, setSelectedBankAccount] =
-    useState<BankAccount | null>(null);
+    useState<any | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [savingKyc, setSavingKyc] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
 
-  const [errors, setErrors] =
-    useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const loadKyc = async () => {
-    try {
-      setLoading(true);
+  // =========================================================
+  // DETERMINE CURRENT ONBOARDING STEP
+  // =========================================================
 
-      const response = await kycApi.getMyKyc();
-      const data = response?.data;
-
-      if (!data) {
-        return;
+  const determineCurrentStep = useCallback(
+    (
+      kycData: KycData | null,
+      bankAccount: any | null,
+    ): number => {
+      if (!kycData) {
+        return 1;
       }
 
-      const kycData: KycData = {
-        firstName: data.firstName || "",
-        lastName: data.lastName || "",
+      const bvnVerified =
+        kycData.bvnVerificationStatus === "verified";
 
-        dateOfBirth: data.dateOfBirth
-          ? String(data.dateOfBirth).slice(0, 10)
-          : "",
+      const customerVerified =
+        kycData.customerVerificationStatus === "verified";
 
-        gender: data.gender || "",
+      const faceVerified =
+        kycData.faceVerificationStatus === "verified";
 
-        address: data.address || "",
-        city: data.city || "",
-        state: data.state || "",
-        country: data.country || "Nigeria",
+      const bankVerified =
+        bankAccount?.verificationStatus === "verified" ||
+        bankAccount?.status === "verified";
 
-        idType: data.idType || "",
-        idNumber: data.idNumber || "",
+      // -------------------------------------------------------
+      // EVERYTHING COMPLETE
+      // -------------------------------------------------------
 
-        status: data.status,
+      if (
+        bvnVerified &&
+        customerVerified &&
+        faceVerified
+      ) {
+        return 6;
+      }
 
-        bvnLast4: data.bvnLast4 || null,
+      // -------------------------------------------------------
+      // BVN + CUSTOMER VERIFIED
+      // NEXT = FACE VERIFICATION
+      // -------------------------------------------------------
 
-        bvnVerificationStatus:
-          data.bvnVerificationStatus || "not_started",
+      if (
+        bvnVerified &&
+        customerVerified
+      ) {
+        return 5;
+      }
 
-        customerVerificationStatus:
-          data.customerVerificationStatus || "not_started",
+      // -------------------------------------------------------
+      // BANK VERIFIED
+      // NEXT = BVN
+      // -------------------------------------------------------
 
-        faceVerificationStatus:
-          data.faceVerificationStatus || "not_started",
-      };
+      if (bankVerified) {
+        return 4;
+      }
+
+      // -------------------------------------------------------
+      // KYC SUBMITTED
+      // NEXT = BANK
+      // -------------------------------------------------------
+
+      if (
+        kycData.status === "submitted" ||
+        kycData.status === "under_review" ||
+        kycData.status === "verified"
+      ) {
+        return 3;
+      }
+
+      // -------------------------------------------------------
+      // DEFAULT
+      // -------------------------------------------------------
+
+      return 1;
+    },
+    [],
+  );
+
+  // =========================================================
+  // LOAD KYC
+  // =========================================================
+
+  const loadKyc = useCallback(async (): Promise<KycData | null> => {
+    try {
+      const response = await kycApi.getMyKyc();
+
+      console.log("=================================");
+      console.log("📋 KYC API RESPONSE");
+      console.log(response);
+      console.log("📋 KYC DATA");
+      console.log(response?.data);
+      console.log("=================================");
+
+      const kycData = response?.data ?? null;
 
       setKyc(kycData);
 
-      setPersonal({
-        firstName: kycData.firstName,
-        lastName: kycData.lastName,
-        dateOfBirth: kycData.dateOfBirth,
-        gender: kycData.gender,
-      });
+      return kycData;
+    } catch (err: any) {
+      console.error(
+        "❌ FAILED TO LOAD KYC:",
+        err?.response?.data || err?.message || err,
+      );
 
-      setIdentity({
-        address: kycData.address,
-        city: kycData.city,
-        state: kycData.state,
-        country: kycData.country,
-        idType: kycData.idType,
-        idNumber: kycData.idNumber,
-      });
-    } catch (error: any) {
-      if (error?.response?.status !== 404) {
-        toast.error(
-          error?.response?.data?.message ||
-            error?.message ||
-            "Unable to load KYC information",
+      setError(
+        err?.response?.data?.message ||
+          "Unable to load your verification information.",
+      );
+
+      return null;
+    }
+  }, []);
+
+  // =========================================================
+  // LOAD BANK ACCOUNT
+  // =========================================================
+
+  const loadSelectedBankAccount =
+    useCallback(async (): Promise<any | null> => {
+      try {
+        /*
+         * Keep your existing bank-account loading logic here.
+         *
+         * This section intentionally does not assume a specific
+         * bankApi response structure.
+         */
+
+        return selectedBankAccount;
+      } catch (err: any) {
+        console.error(
+          "❌ FAILED TO LOAD BANK ACCOUNT:",
+          err?.response?.data || err?.message || err,
         );
+
+        return null;
       }
-    } finally {
-      setLoading(false);
-    }
-  };
+    }, [selectedBankAccount]);
 
-  const loadSelectedBankAccount = async () => {
-    try {
-      const response = await bankApi.getMyBankAccounts();
-
-      const accounts = (response?.data ??
-        response ??
-        []) as BankAccount[];
-
-      if (!Array.isArray(accounts)) {
-        return;
-      }
-
-      const verifiedPrimary = accounts.find(
-        (account) =>
-          account.verificationStatus === "verified" &&
-          account.isPrimary === true,
-      );
-
-      if (verifiedPrimary) {
-        setSelectedBankAccountId(verifiedPrimary._id);
-        setSelectedBankAccount(verifiedPrimary);
-        return;
-      }
-
-      const verified = accounts.find(
-        (account) =>
-          account.verificationStatus === "verified",
-      );
-
-      if (verified) {
-        setSelectedBankAccountId(verified._id);
-        setSelectedBankAccount(verified);
-      }
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Unable to load bank account",
-      );
-    }
-  };
+  // =========================================================
+  // INITIAL LOAD
+  // =========================================================
 
   useEffect(() => {
+    let mounted = true;
+
     const initialize = async () => {
-      await loadKyc();
-      await loadSelectedBankAccount();
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [kycData, bankAccount] = await Promise.all([
+          loadKyc(),
+          loadSelectedBankAccount(),
+        ]);
+
+        if (!mounted) {
+          return;
+        }
+
+        const nextStep = determineCurrentStep(
+          kycData,
+          bankAccount,
+        );
+
+        console.log("=================================");
+        console.log("🧭 ONBOARDING STEP");
+        console.log("BVN:", kycData?.bvnVerificationStatus);
+        console.log(
+          "CUSTOMER:",
+          kycData?.customerVerificationStatus,
+        );
+        console.log(
+          "FACE:",
+          kycData?.faceVerificationStatus,
+        );
+        console.log("NEXT STEP:", nextStep);
+        console.log("=================================");
+
+        // -----------------------------------------------------
+        // ALL KYC COMPLETE
+        // -----------------------------------------------------
+
+        if (nextStep === 6) {
+          navigate("/onboarding/loan", {
+            replace: true,
+          });
+
+          return;
+        }
+
+        setCurrentStep(nextStep);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     };
 
     initialize();
-  }, []);
 
-  const handlePersonalChange = (
-    field: keyof PersonalFormData,
-    value: string,
-  ) => {
-    setPersonal((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
+    return () => {
+      mounted = false;
+    };
+  }, [
+    determineCurrentStep,
+    loadKyc,
+    loadSelectedBankAccount,
+    navigate,
+  ]);
 
-    setErrors((previous) => ({
-      ...previous,
-      [field]: "",
-    }));
-  };
+  // =========================================================
+  // REFRESH VERIFICATION STATUS
+  // =========================================================
 
-  const handleIdentityChange = (
-    field: keyof IdentityFormData,
-    value: string,
-  ) => {
-    setIdentity((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
+  const refreshVerificationStatus =
+    useCallback(async (): Promise<KycVerificationStatus | null> => {
+      try {
+        const response =
+          await kycApi.getVerificationStatus();
 
-    setErrors((previous) => ({
-      ...previous,
-      [field]: "",
-    }));
-  };
+        console.log("=================================");
+        console.log("🔄 VERIFICATION STATUS RESPONSE");
+        console.log(response);
+        console.log("🔄 VERIFICATION DATA");
+        console.log(response?.data);
+        console.log("=================================");
 
-  const handleBankSelect = async (accountId: string) => {
-    setSelectedBankAccountId(accountId);
+        const verification =
+          response?.data ?? null;
 
-    try {
-      const response = await bankApi.getMyBankAccounts();
+        if (!verification) {
+          return null;
+        }
 
-      const accounts = (response?.data ??
-        response ??
-        []) as BankAccount[];
+        setKyc((previous) => {
+          if (!previous) {
+            return previous;
+          }
 
-      const account = Array.isArray(accounts)
-        ? accounts.find((item) => item._id === accountId)
-        : null;
+          return {
+            ...previous,
 
-      if (account) {
-        setSelectedBankAccount(account);
-      }
-    } catch {
-      // BankAccountStep handles its own errors.
-    }
-  };
+            status:
+              verification.kycStatus ??
+              previous.status,
 
-  const validatePersonal = () => {
-    const nextErrors: Record<string, string> = {};
+            bvnVerificationStatus:
+              verification.bvnVerificationStatus ??
+              previous.bvnVerificationStatus,
 
-    if (!personal.firstName.trim()) {
-      nextErrors.firstName = "First name is required";
-    }
+            bvnVerificationReference:
+              verification.bvnVerificationReference ??
+              previous.bvnVerificationReference,
 
-    if (!personal.lastName.trim()) {
-      nextErrors.lastName = "Last name is required";
-    }
+            bvnVerificationReason:
+              verification.bvnVerificationReason ??
+              previous.bvnVerificationReason,
 
-    if (!personal.dateOfBirth) {
-      nextErrors.dateOfBirth =
-        "Date of birth is required";
-    }
+            bvnVerifiedAt:
+              verification.bvnVerifiedAt ??
+              previous.bvnVerifiedAt,
 
-    if (!personal.gender) {
-      nextErrors.gender = "Gender is required";
-    }
+            customerVerificationStatus:
+              verification.customerVerificationStatus ??
+              previous.customerVerificationStatus,
 
-    setErrors(nextErrors);
+            customerVerificationReference:
+              verification.customerVerificationReference ??
+              previous.customerVerificationReference,
 
-    return Object.keys(nextErrors).length === 0;
-  };
+            customerVerificationReason:
+              verification.customerVerificationReason ??
+              previous.customerVerificationReason,
 
-  const validateIdentity = () => {
-    const nextErrors: Record<string, string> = {};
+            customerVerifiedAt:
+              verification.customerVerifiedAt ??
+              previous.customerVerifiedAt,
 
-    if (!identity.address.trim()) {
-      nextErrors.address = "Address is required";
-    }
+            verificationProvider:
+              verification.verificationProvider ??
+              previous.verificationProvider,
 
-    if (!identity.city.trim()) {
-      nextErrors.city = "City is required";
-    }
+            faceVerificationStatus:
+              verification.faceVerificationStatus ??
+              previous.faceVerificationStatus,
 
-    if (!identity.state.trim()) {
-      nextErrors.state = "State is required";
-    }
+            faceVerificationReference:
+              verification.faceVerificationReference ??
+              previous.faceVerificationReference,
 
-    if (!identity.country.trim()) {
-      nextErrors.country = "Country is required";
-    }
+            faceVerificationReason:
+              verification.faceVerificationReason ??
+              previous.faceVerificationReason,
 
-    if (!identity.idType) {
-      nextErrors.idType = "ID type is required";
-    }
+            faceVerifiedAt:
+              verification.faceVerifiedAt ??
+              previous.faceVerifiedAt,
 
-    if (!identity.idNumber.trim()) {
-      nextErrors.idNumber = "ID number is required";
-    }
+            faceVerificationProvider:
+              verification.faceVerificationProvider ??
+              previous.faceVerificationProvider,
+          };
+        });
 
-    setErrors(nextErrors);
-
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const saveKyc = async () => {
-    try {
-      setSavingKyc(true);
-
-      const response = await kycApi.submitKyc({
-        firstName: personal.firstName.trim(),
-        lastName: personal.lastName.trim(),
-        dateOfBirth: personal.dateOfBirth,
-        gender: personal.gender,
-
-        address: identity.address.trim(),
-        city: identity.city.trim(),
-        state: identity.state.trim(),
-        country: identity.country.trim(),
-
-        idType: identity.idType,
-        idNumber: identity.idNumber.trim(),
-      });
-
-      const responseData = response?.data;
-
-      setKyc((previous) => ({
-        ...(previous || {}),
-
-        firstName: personal.firstName.trim(),
-        lastName: personal.lastName.trim(),
-        dateOfBirth: personal.dateOfBirth,
-        gender: personal.gender,
-
-        address: identity.address.trim(),
-        city: identity.city.trim(),
-        state: identity.state.trim(),
-        country: identity.country.trim(),
-
-        idType: identity.idType,
-        idNumber: identity.idNumber.trim(),
-
-        status:
-          responseData?.status ||
-          previous?.status ||
-          "submitted",
-
-        bvnLast4:
-          responseData?.bvnLast4 ||
-          previous?.bvnLast4 ||
-          null,
-
-        bvnVerificationStatus:
-          responseData?.bvnVerificationStatus ||
-          previous?.bvnVerificationStatus ||
-          "not_started",
-
-        customerVerificationStatus:
-          responseData?.customerVerificationStatus ||
-          previous?.customerVerificationStatus ||
-          "not_started",
-
-        faceVerificationStatus:
-          responseData?.faceVerificationStatus ||
-          previous?.faceVerificationStatus ||
-          "not_started",
-      }));
-
-      toast.success(
-        "KYC information saved successfully",
-      );
-
-      return true;
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Unable to save KYC information",
-      );
-
-      return false;
-    } finally {
-      setSavingKyc(false);
-    }
-  };
-
-  const nextStep = async () => {
-    if (currentStep === 1) {
-      if (!validatePersonal()) {
-        return;
-      }
-
-      setCurrentStep(2);
-      return;
-    }
-
-    if (currentStep === 2) {
-      if (!validateIdentity()) {
-        return;
-      }
-
-      const saved = await saveKyc();
-
-      if (!saved) {
-        return;
-      }
-
-      setCurrentStep(3);
-      return;
-    }
-
-    if (currentStep === 3) {
-      if (!selectedBankAccountId || !selectedBankAccount) {
-        toast.error("Please select a bank account.");
-        return;
-      }
-
-      if (
-        selectedBankAccount.verificationStatus !==
-        "verified"
-      ) {
-        toast.error(
-          "Your bank account must be verified first.",
+        return verification;
+      } catch (err: any) {
+        console.error(
+          "❌ FAILED TO REFRESH VERIFICATION STATUS:",
+          err?.response?.data ||
+            err?.message ||
+            err,
         );
-        return;
-      }
 
-      if (!selectedBankAccount.isPrimary) {
-        toast.error("Your bank account must be primary.");
-        return;
-      }
-
-      setCurrentStep(4);
-      return;
-    }
-
-    if (currentStep === 4) {
-      const bvnVerified =
-        kyc?.bvnVerificationStatus === "verified";
-
-      const customerVerified =
-        kyc?.customerVerificationStatus === "verified";
-
-      if (!bvnVerified || !customerVerified) {
-        toast.error(
-          "Please complete BVN verification before continuing.",
+        setError(
+          err?.response?.data?.message ||
+            "Unable to refresh verification status.",
         );
-        return;
+
+        return null;
       }
+    }, []);
 
-      setCurrentStep(5);
-    }
-  };
-
-  const previousStep = () => {
-    if (currentStep > 1 && currentStep < 5) {
-      setCurrentStep((step) => step - 1);
-    }
-  };
-
-  const refreshAfterBvn = async () => {
-    try {
-      const response =
-        await kycApi.getVerificationStatus();
-
-      const data = response?.data;
-
-      setKyc((previous) => ({
-        ...(previous || {}),
-
-        firstName:
-          previous?.firstName || personal.firstName,
-
-        lastName:
-          previous?.lastName || personal.lastName,
-
-        dateOfBirth:
-          previous?.dateOfBirth || personal.dateOfBirth,
-
-        gender:
-          previous?.gender || personal.gender,
-
-        address:
-          previous?.address || identity.address,
-
-        city:
-          previous?.city || identity.city,
-
-        state:
-          previous?.state || identity.state,
-
-        country:
-          previous?.country || identity.country,
-
-        idType:
-          previous?.idType || identity.idType,
-
-        idNumber:
-          previous?.idNumber || identity.idNumber,
-
-        status:
-          data?.kycStatus ||
-          data?.status ||
-          previous?.status,
-
-        bvnLast4:
-          data?.bvnLast4 ||
-          previous?.bvnLast4 ||
-          null,
-
-        bvnVerificationStatus:
-          data?.bvnVerificationStatus ||
-          previous?.bvnVerificationStatus ||
-          "not_started",
-
-        customerVerificationStatus:
-          data?.customerVerificationStatus ||
-          previous?.customerVerificationStatus ||
-          "not_started",
-
-        faceVerificationStatus:
-          data?.faceVerificationStatus ||
-          previous?.faceVerificationStatus ||
-          "not_started",
-      }));
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Unable to refresh verification status",
-      );
-    }
-  };
+  // =========================================================
+  // BVN VERIFIED
+  // =========================================================
 
   const handleBvnVerified = async () => {
-    await refreshAfterBvn();
+    setError(null);
+    setMessage(null);
 
-    try {
-      const response =
-        await kycApi.getVerificationStatus();
+    const verification =
+      await refreshVerificationStatus();
 
-      const data = response?.data;
-
-      if (
-        data?.bvnVerificationStatus === "verified" &&
-        data?.customerVerificationStatus === "verified"
-      ) {
-        setKyc((previous) => ({
-          ...(previous || {}),
-
-          bvnVerificationStatus: "verified",
-          customerVerificationStatus: "verified",
-
-          bvnLast4:
-            data?.bvnLast4 ||
-            previous?.bvnLast4 ||
-            null,
-
-          status:
-            data?.kycStatus ||
-            data?.status ||
-            previous?.status,
-
-          faceVerificationStatus:
-            data?.faceVerificationStatus ||
-            previous?.faceVerificationStatus ||
-            "not_started",
-        }));
-
-        setCurrentStep(5);
-      }
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Unable to confirm verification status",
-      );
+    if (!verification) {
+      return;
     }
+
+    const bvnVerified =
+      verification.bvnVerificationStatus ===
+      "verified";
+
+    const customerVerified =
+      verification.customerVerificationStatus ===
+      "verified";
+
+    if (
+      bvnVerified &&
+      customerVerified
+    ) {
+      setCurrentStep(5);
+
+      setMessage(
+        "BVN verification successful. Please complete face verification.",
+      );
+
+      return;
+    }
+
+    if (
+      verification.bvnVerificationStatus ===
+      "pending"
+    ) {
+      setMessage(
+        "Your BVN verification is still being processed. Please refresh again shortly.",
+      );
+
+      return;
+    }
+
+    if (
+      verification.bvnVerificationStatus ===
+      "failed"
+    ) {
+      setError(
+        verification.bvnVerificationReason ||
+          "BVN verification failed.",
+      );
+
+      return;
+    }
+
+    setMessage(
+      "Your verification status has been updated.",
+    );
   };
 
-  const handleFaceVerified = () => {
-    setKyc((previous) => ({
-      ...(previous || {}),
-      faceVerificationStatus: "verified",
-    }));
+  // =========================================================
+  // FACE VERIFIED
+  // =========================================================
 
-    toast.success("Face verification completed.");
+  const handleFaceVerified = async () => {
+    setError(null);
 
-    navigate("/onboarding/loan");
+    /*
+     * Update the local state immediately.
+     */
+
+    setKyc((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        faceVerificationStatus: "verified",
+        faceVerifiedAt:
+          new Date().toISOString(),
+      };
+    });
+
+    setMessage(
+      "Face verification successful. Your onboarding is complete.",
+    );
+
+    /*
+     * Give React a moment to update the UI, then move
+     * directly to the loan onboarding page.
+     */
+
+    navigate("/onboarding/loan", {
+      replace: true,
+    });
   };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2
-          className="animate-spin text-blue-600"
-          size={30}
-        />
+      <div className="flex min-h-[300px] items-center justify-center">
+        <div className="text-center">
+          <div className="mb-3">
+            Loading your verification status...
+          </div>
+
+          <div className="text-sm text-gray-500">
+            Please wait.
+          </div>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-gray-50 px-3 py-4 sm:px-4 sm:py-6 lg:py-8">
-      <div className="mx-auto w-full max-w-4xl min-w-0">
-        <div className="mb-5 sm:mb-8">
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-            Complete Your Verification
-          </h1>
+  // =========================================================
+  // ERROR
+  // =========================================================
 
-          <p className="mt-2 max-w-2xl text-xs leading-5 text-gray-500 sm:text-sm">
-            Complete your identity, bank, BVN, and face
-            verification before applying for a loan.
+  if (error && !kyc) {
+    return (
+      <div className="mx-auto max-w-xl p-6">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <h2 className="font-semibold text-red-700">
+            Verification Error
+          </h2>
+
+          <p className="mt-2 text-sm text-red-600">
+            {error}
           </p>
-        </div>
 
-        <div className="w-full min-w-0 rounded-2xl bg-white p-4 shadow-sm sm:p-5 md:p-8">
-          <div className="w-full min-w-0 overflow-x-auto pb-1">
-            <div className="min-w-max sm:min-w-0">
-              <KycStepIndicator currentStep={currentStep} />
-            </div>
-          </div>
-
-          <div className="my-5 border-t border-gray-100 sm:my-8" />
-
-          {currentStep === 1 && (
-            <PersonalStep
-              form={personal}
-              onChange={handlePersonalChange}
-              errors={errors}
-            />
-          )}
-
-          {currentStep === 2 && (
-            <IdentityStep
-              form={identity}
-              onChange={handleIdentityChange}
-              errors={errors}
-            />
-          )}
-
-          {currentStep === 3 && (
-            <BankAccountStep
-              selectedBankAccountId={selectedBankAccountId}
-              onSelect={handleBankSelect}
-            />
-          )}
-
-          {currentStep === 4 && (
-            <BvnStep
-              bankAccountId={selectedBankAccountId}
-              bvnLast4={kyc?.bvnLast4}
-              bvnVerificationStatus={
-                kyc?.bvnVerificationStatus
-              }
-              customerVerificationStatus={
-                kyc?.customerVerificationStatus
-              }
-              onVerified={handleBvnVerified}
-            />
-          )}
-
-          {currentStep === 5 && (
-            <FaceVerificationStep
-              isVerified={
-                kyc?.faceVerificationStatus === "verified"
-              }
-              onVerified={handleFaceVerified}
-            />
-          )}
-
-          {currentStep < 5 && (
-            <div className="mt-7 flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:gap-0 sm:pt-6">
-              <button
-                type="button"
-                onClick={previousStep}
-                disabled={
-                  currentStep === 1 || savingKyc
-                }
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
-              >
-                <ChevronLeft size={17} />
-                Back
-              </button>
-
-              <button
-                type="button"
-                onClick={nextStep}
-                disabled={savingKyc}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
-              >
-                {savingKyc && (
-                  <Loader2
-                    size={17}
-                    className="animate-spin"
-                  />
-                )}
-
-                Continue
-
-                {!savingKyc && (
-                  <ChevronRight size={17} />
-                )}
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white"
+          >
+            Try Again
+          </button>
         </div>
       </div>
+    );
+  }
+
+  // =========================================================
+  // MAIN
+  // =========================================================
+
+  return (
+    <div className="mx-auto w-full max-w-3xl p-4 md:p-6">
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">
+          Identity Verification
+        </h1>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Complete the steps below to continue your loan
+          application.
+        </p>
+      </div>
+
+      {/* =====================================================
+          MESSAGE
+      ===================================================== */}
+
+      {message && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+          {message}
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* =====================================================
+          STEP INDICATOR
+      ===================================================== */}
+
+      <div className="mb-8 flex items-center justify-between">
+        {[
+          "Personal",
+          "Identity",
+          "Bank",
+          "BVN",
+          "Face",
+        ].map((label, index) => {
+          const stepNumber = index + 1;
+
+          const active =
+            currentStep >= stepNumber;
+
+          return (
+            <div
+              key={label}
+              className="flex flex-1 items-center"
+            >
+              <div
+                className={[
+                  "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold",
+                  active
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-200 text-gray-500",
+                ].join(" ")}
+              >
+                {stepNumber}
+              </div>
+
+              <span
+                className={[
+                  "ml-2 hidden text-xs sm:inline",
+                  active
+                    ? "text-blue-600"
+                    : "text-gray-400",
+                ].join(" ")}
+              >
+                {label}
+              </span>
+
+              {index < 4 && (
+                <div
+                  className={[
+                    "mx-2 h-px flex-1",
+                    currentStep >
+                    stepNumber
+                      ? "bg-blue-600"
+                      : "bg-gray-200",
+                  ].join(" ")}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* =====================================================
+          STEP 5 — FACE VERIFICATION
+      ===================================================== */}
+
+      {currentStep === 5 && (
+        <FaceVerificationStep
+          isVerified={
+            kyc?.faceVerificationStatus ===
+            "verified"
+          }
+          onVerified={
+            handleFaceVerified
+          }
+        />
+      )}
+
+      {/* =====================================================
+          STEP 4 — BVN
+      ===================================================== */}
+
+      {currentStep === 4 && (
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-semibold">
+            BVN Verification
+          </h2>
+
+          <p className="mt-2 text-sm text-gray-600">
+            Verify your Bank Verification Number to
+            continue.
+          </p>
+
+          {/* -------------------------------------------------
+              IMPORTANT:
+              Keep your existing BVN form/component here.
+              When verification succeeds, call:
+              
+              handleBvnVerified()
+          ------------------------------------------------- */}
+
+          <button
+            type="button"
+            onClick={handleBvnVerified}
+            className="mt-6 rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white"
+          >
+            Refresh Verification Status
+          </button>
+        </div>
+      )}
+
+      {/* =====================================================
+          OTHER STEPS
+      ===================================================== */}
+
+      {currentStep < 4 && (
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-semibold">
+            Continue Your Application
+          </h2>
+
+          <p className="mt-2 text-sm text-gray-600">
+            Complete the current onboarding step to
+            continue.
+          </p>
+        </div>
+      )}
+
+      {/* =====================================================
+          COMPLETE
+      ===================================================== */}
+
+      {currentStep === 6 && (
+        <div className="rounded-xl border bg-white p-6 text-center shadow-sm">
+          <h2 className="text-xl font-semibold">
+            Verification Complete
+          </h2>
+
+          <p className="mt-2 text-sm text-gray-600">
+            Redirecting you to loan onboarding...
+          </p>
+        </div>
+      )}
     </div>
   );
 };

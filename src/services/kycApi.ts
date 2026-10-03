@@ -489,6 +489,17 @@ const submitKyc =
     return response.data;
   };
 
+const savePersonalInfo = async (
+  payload: Pick<SubmitKycPayload, "firstName" | "lastName" | "dateOfBirth" | "gender">,
+): Promise<KycResponse> => {
+  const response = await API.post<KycResponse>(
+    "/kyc/personal",
+    payload,
+  );
+
+  return response.data;
+};
+
 // =========================================================
 // BVN VERIFICATION
 // =========================================================
@@ -714,6 +725,7 @@ const rejectKyc =
 const kycApi = {
   // Customer
   getMyKyc,
+  savePersonalInfo,
   submitKyc,
   startBvnVerification,
   startFaceVerification,
@@ -732,6 +744,7 @@ const kycApi = {
 
 export {
   getMyKyc,
+  savePersonalInfo,
   submitKyc,
   startBvnVerification,
   startFaceVerification,

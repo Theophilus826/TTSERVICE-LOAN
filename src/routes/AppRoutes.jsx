@@ -39,7 +39,13 @@ CUSTOMER ACCOUNT / VERIFICATION
 ========================================================= */
 
 import Profile from "../pages/Profile";
+import KycFlowGuard from "../component/KycFlowGuard";
 import Kyc from "../pages/Kyc";
+import PersonalStep from "../component/PersonalStep";
+// import BankAccountStep from "../component/BankAccountStep";
+import BvnStep from "../component/BvnStep";
+// import FaceVerificationStep from "../component/FaceVerificationStep";
+import FaceVerificationPage from "../pages/FaceVerificationPage";
 
 /* =========================================================
 MANDATES
@@ -88,12 +94,12 @@ ROLE CONFIGURATION
 ========================================================= */
 
 const ADMIN_ROLES = [
-"admin",
-"super_admin",
-"loan_officer",
-"risk_officer",
-"finance",
-"support",
+  "admin",
+  "super_admin",
+  "loan_officer",
+  "risk_officer",
+  "finance",
+  "support",
 ];
 
 /* =========================================================
@@ -101,106 +107,71 @@ ROUTES
 ========================================================= */
 
 function AppRoutes() {
-return ( <Routes>
-{/* =====================================================
+  return (
+    <Routes>
+      {/* =====================================================
 PUBLIC ROUTES
 ===================================================== */}
 
+      <Route element={<PublicRoute />}>
+        <Route path="/login" element={<Login />} />
 
-  <Route element={<PublicRoute />}>
-    <Route
-      path="/login"
-      element={<Login />}
-    />
+        <Route path="/register" element={<Register />} />
 
-    <Route
-      path="/register"
-      element={<Register />}
-    />
+        <Route path="/resetpassword" element={<ResetPassword />} />
 
-    <Route
-      path="/resetpassword"
-      element={<ResetPassword />}
-    />
+        <Route path="/resetpassword/:token" element={<ResetPassword />} />
+      </Route>
 
-    <Route
-      path="/resetpassword/:token"
-      element={<ResetPassword />}
-    />
-  </Route>
-
-  {/* =====================================================
+      {/* =====================================================
       AUTHENTICATED CUSTOMER ROUTES
   ===================================================== */}
 
-  <Route element={<ProtectedRoute />}>
-    <Route element={<MainLayout />}>
-
-      {/* =================================================
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          {/* =================================================
           DASHBOARD
       ================================================= */}
 
-      <Route
-        path="/dashboard"
-        element={
-          <OnboardingRouter>
-            <Dashboard />
-          </OnboardingRouter>
-        }
-      />
+          <Route
+            path="/dashboard"
+            element={
+              <OnboardingRouter>
+                <Dashboard />
+              </OnboardingRouter>
+            }
+          />
 
-      {/* =================================================
+          {/* =================================================
           LOANS
       ================================================= */}
 
-      <Route
-        path="/loans"
-        element={<Loans />}
-      />
+          <Route path="/loans" element={<Loans />} />
 
-      <Route
-        path="/loans/apply/:productId"
-        element={<LoanApplication />}
-      />
+          <Route path="/loans/apply/:productId" element={<LoanApplication />} />
 
-      <Route
-        path="/loans/applications"
-        element={<LoanApplications />}
-      />
+          <Route path="/loans/applications" element={<LoanApplications />} />
 
-      <Route
-        path="/loans/applications/:id"
-        element={<LoanApplicationDetails />}
-      />
+          <Route
+            path="/loans/applications/:id"
+            element={<LoanApplicationDetails />}
+          />
 
-        <Route 
-        path="/bank-accounts"
-        element={<BankAccountStep/>}
-        />
-      {/* =================================================
+          {/* =================================================
           CUSTOMER ACTUAL LOANS
       ================================================= */}
 
-      <Route
-        path="/my-loans"
-        element={<MyLoans />}
-      />
+          <Route path="/my-loans" element={<MyLoans />} />
 
-      <Route
-        path="/my-loans/:id"
-        element={<LoanDetails />}
-      />
+          <Route path="/my-loans/:id" element={<LoanDetails />} />
 
-      {/* =================================================
+          {/* =================================================
           CUSTOMER PROFILE
       ================================================= */}
 
-      <Route
-        path="/profile"
-        element={<Profile />}
-      />
+          <Route path="/profile" element={<Profile />} />
 
-      {/* =================================================
+          {/* =================================================
           UNIFIED CUSTOMER KYC ONBOARDING
           
           Flow:
@@ -216,322 +187,226 @@ PUBLIC ROUTES
           Loan Onboarding
       ================================================= */}
 
-      <Route
-        path="/kyc"
-        element={<Kyc />}
-      />
+           {/* Other application routes */} 
+          <Route element={<KycFlowGuard />}> 
+          <Route path="/kyc-personal" element={<PersonalStep />} /> 
+          {/* Identity / customer verification */} 
+          <Route path="/kyc" element={<Kyc />} /> 
+          <Route path="/bank-accounts" element={<BankAccountStep />} /> 
+          <Route path="/bvn" element={<BvnStep />} /> 
+          <Route path="/face-verification" element={<FaceVerificationPage/>} /> 
+          </Route>
 
-      {/* =================================================
+          {/* =================================================
           REPAYMENT MANDATE
       ================================================= */}
 
-      <Route
-        path="/repayment-mandate"
-        element={<RepaymentMandatePage />}
-      />
+          <Route path="/repayment-mandate" element={<RepaymentMandatePage />} />
 
-      {/* =================================================
+          {/* =================================================
           LOAN OFFERS
       ================================================= */}
 
-      <Route
-        path="/loan-offers"
-        element={<LoanOffers />}
-      />
+          <Route path="/loan-offers" element={<LoanOffers />} />
 
-      <Route
-        path="/loan-offers/:offerId"
-        element={<LoanOfferDetails />}
-      />
+          <Route path="/loan-offers/:offerId" element={<LoanOfferDetails />} />
 
-      {/* =================================================
+          {/* =================================================
           MANDATE AUTHORIZATION
       ================================================= */}
 
-      <Route
-        path="/mandates/callback/:reference"
-        element={<MandateAuthorization />}
-      />
+          <Route
+            path="/mandates/callback/:reference"
+            element={<MandateAuthorization />}
+          />
 
-      <Route
-        path="/mandates/callback"
-        element={<MandateAuthorization />}
-      />
+          <Route path="/mandates/callback" element={<MandateAuthorization />} />
 
-      <Route
-        path="/mandate/authorize/:reference"
-        element={<MandateAuthorization />}
-      />
+          <Route
+            path="/mandate/authorize/:reference"
+            element={<MandateAuthorization />}
+          />
 
-      {/* =================================================
+          {/* =================================================
           REPAYMENT SCHEDULE
       ================================================= */}
 
-      <Route
-        path="/loans/repayments/:repaymentScheduleId"
-        element={<RepaymentSchedule />}
-      />
+          <Route
+            path="/loans/repayments/:repaymentScheduleId"
+            element={<RepaymentSchedule />}
+          />
 
-      {/* =================================================
+          {/* =================================================
           REPAYMENT ACCOUNT / DVA
       ================================================= */}
 
-      <Route
-        path="/repayment-account"
-        element={<RepaymentAccount />}
-      />
+          <Route path="/repayment-account" element={<RepaymentAccount />} />
 
-      {/* =================================================
+          {/* =================================================
           MAKE REPAYMENT
       ================================================= */}
 
-      <Route
-        path="/loans/repayments/pay/:repaymentScheduleId"
-        element={<MakeRepayment />}
-      />
+          <Route
+            path="/loans/repayments/pay/:repaymentScheduleId"
+            element={<MakeRepayment />}
+          />
 
-      {/* =================================================
+          {/* =================================================
           REPAYMENT HISTORY
       ================================================= */}
 
-      <Route
-        path="/loans/repayments/history"
-        element={<RepaymentHistory />}
-      />
+          <Route
+            path="/loans/repayments/history"
+            element={<RepaymentHistory />}
+          />
 
-      {/* =================================================
+          {/* =================================================
           AUTO-DEBIT
       ================================================= */}
 
-      <Route
-        path="/repayments/auto-debit"
-        element={<AutoDebit />}
-      />
+          <Route path="/repayments/auto-debit" element={<AutoDebit />} />
 
-      <Route
-        path="/repayments/auto-debit/history"
-        element={<AutoDebitHistory />}
-      />
+          <Route
+            path="/repayments/auto-debit/history"
+            element={<AutoDebitHistory />}
+          />
 
-      {/* =================================================
+          {/* =================================================
           UNKNOWN CUSTOMER ROUTES
       ================================================= */}
 
-      <Route
-        path="*"
-        element={
-          <Navigate
-            to="/dashboard"
-            replace
-          />
-        }
-      />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Route>
 
-    </Route>
-  </Route>
-
-  {/* =====================================================
+      {/* =====================================================
       ADMIN / STAFF ROUTES
   ===================================================== */}
 
-  <Route element={<ProtectedRoute />}>
-    <Route
-      element={
-        <RoleRoute
-          allowedRoles={[...ADMIN_ROLES]}
-        />
-      }
-    >
-      <Route
-        path="/admin"
-        element={<AdminLayout />}
-      >
-
-        {/* =============================================
+      <Route element={<ProtectedRoute />}>
+        <Route element={<RoleRoute allowedRoles={[...ADMIN_ROLES]} />}>
+          <Route path="/admin" element={<AdminLayout />}>
+            {/* =============================================
             ADMIN DASHBOARD
         ============================================= */}
 
-        <Route
-          index
-          element={<AdminDashboard />}
-        />
+            <Route index element={<AdminDashboard />} />
 
-        {/* =============================================
+            {/* =============================================
             USERS
         ============================================= */}
 
-        <Route
-          path="users"
-          element={<AdminUsers />}
-        />
+            <Route path="users" element={<AdminUsers />} />
 
-        {/* =============================================
+            {/* =============================================
             LOANS
         ============================================= */}
 
-        <Route
-          path="loans"
-          element={<AdminLoans />}
-        />
+            <Route path="loans" element={<AdminLoans />} />
 
-        {/* =============================================
+            {/* =============================================
             LOAN OFFERS
         ============================================= */}
 
-        <Route
-          path="offers"
-          element={<AdminOffers />}
-        />
+            <Route path="offers" element={<AdminOffers />} />
 
-        {/* =============================================
+            {/* =============================================
             MANDATES
         ============================================= */}
 
-        <Route
-          path="mandates"
-          element={<AdminMandates />}
-        />
+            <Route path="mandates" element={<AdminMandates />} />
 
-        {/* =============================================
+            {/* =============================================
             TRANSFERS
         ============================================= */}
 
-        <Route
-          path="transfers"
-          element={<AdminTransfers />}
-        />
+            <Route path="transfers" element={<AdminTransfers />} />
 
-        {/* =============================================
+            {/* =============================================
             LEDGER
         ============================================= */}
 
-        <Route
-          path="ledger"
-          element={<AdminLedger />}
-        />
+            <Route path="ledger" element={<AdminLedger />} />
 
-        {/* =============================================
+            {/* =============================================
             FRAUD / RISK
         ============================================= */}
 
-        <Route
-          path="fraud"
-          element={<AdminFraud />}
-        />
+            <Route path="fraud" element={<AdminFraud />} />
 
-        {/* =============================================
+            {/* =============================================
             AUDIT LOGS
         ============================================= */}
 
-        <Route
-          path="audit"
-          element={<AdminAudit />}
-        />
+            <Route path="audit" element={<AdminAudit />} />
 
-        {/* =============================================
+            {/* =============================================
             LOAN PRODUCTS
         ============================================= */}
 
-        <Route
-          path="loan-products"
-          element={<AdminLoanProducts />}
-        />
+            <Route path="loan-products" element={<AdminLoanProducts />} />
 
-        {/* =============================================
+            {/* =============================================
             LOAN APPLICATIONS
         ============================================= */}
 
-        <Route
-          path="loan-applications"
-          element={<AdminLoanApplications />}
-        />
+            <Route
+              path="loan-applications"
+              element={<AdminLoanApplications />}
+            />
 
-        <Route
-          path="loan-applications/:applicationId"
-          element={<AdminLoanApplicationDetails />}
-        />
+            <Route
+              path="loan-applications/:applicationId"
+              element={<AdminLoanApplicationDetails />}
+            />
 
-        {/* =============================================
+            {/* =============================================
             KYC
         ============================================= */}
 
-        <Route
-          path="kyc"
-          element={<AdminKyc />}
-        />
+            <Route path="kyc" element={<AdminKyc />} />
 
-        <Route
-          path="kyc/:id"
-          element={<AdminKycDetail />}
-        />
+            <Route path="kyc/:id" element={<AdminKycDetail />} />
 
-        {/* =============================================
+            {/* =============================================
             BANK ACCOUNT VERIFICATION
         ============================================= */}
 
-        <Route
-          path="bank-accounts"
-          element={<AdminBankAccounts />}
-        />
+            <Route path="bank-accounts" element={<AdminBankAccounts />} />
 
-        {/* =============================================
+            {/* =============================================
             DISBURSEMENTS
         ============================================= */}
 
-        <Route
-          path="disbursements"
-          element={<AdminDisbursement />}
-        />
+            <Route path="disbursements" element={<AdminDisbursement />} />
 
-        <Route
-          path="disbursements/:disbursementId"
-          element={<AdminDisbursementDetails />}
-        />
+            <Route
+              path="disbursements/:disbursementId"
+              element={<AdminDisbursementDetails />}
+            />
 
-        {/* =============================================
+            {/* =============================================
             SETTINGS
         ============================================= */}
 
-        <Route
-          path="settings"
-          element={<AdminSettings />}
-        />
-
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+        </Route>
       </Route>
-    </Route>
-  </Route>
 
-  {/* =====================================================
+      {/* =====================================================
       ROOT
   ===================================================== */}
 
-  <Route
-    path="/"
-    element={
-      <Navigate
-        to="/dashboard"
-        replace
-      />
-    }
-  />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-  {/* =====================================================
+      {/* =====================================================
       GLOBAL UNKNOWN ROUTES
   ===================================================== */}
 
-  <Route
-    path="*"
-    element={
-      <Navigate
-        to="/dashboard"
-        replace
-      />
-    }
-  />
-</Routes>
-
-
-);
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
 }
 
 export default AppRoutes;

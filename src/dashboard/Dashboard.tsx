@@ -329,26 +329,16 @@ export default function Dashboard() {
 
   const buttonText =
     useMemo(() => {
+      if (status && !kycComplete) {
+        return "Complete KYC";
+      }
+
       if (hasActiveLoan) {
         return "View loan";
       }
 
       if (!status) {
         return "Start application";
-      }
-
-      /*
-       * HARD KYC GATE
-       *
-       * Even if the backend says the next step
-       * is LOAN, the user must return to KYC
-       * until all 5 steps are verified.
-       */
-      if (
-        status.nextStep === "LOAN" &&
-        !kycComplete
-      ) {
-        return "Complete KYC";
       }
 
       if (
@@ -396,6 +386,13 @@ export default function Dashboard() {
   // =========================================================
 
   const continueApplication = () => {
+    if (status && !kycComplete) {
+      navigate("/kyc", {
+        replace: true,
+      });
+      return;
+    }
+
     // -------------------------------------------------------
     // REPAYMENT
     // -------------------------------------------------------
@@ -444,24 +441,6 @@ export default function Dashboard() {
     // HARD KYC GATE
     // -------------------------------------------------------
 
-    /*
-     * Never allow the user to enter the loan stage
-     * while KYC is incomplete.
-     *
-     * This check happens BEFORE the switch so that
-     * an incorrect backend nextStep cannot bypass KYC.
-     */
-    if (
-      status.nextStep === "LOAN" &&
-      !kycComplete
-    ) {
-      navigate("/kyc", {
-        replace: true,
-      });
-
-      return;
-    }
-
     // -------------------------------------------------------
     // NEXT STEP
     // -------------------------------------------------------
@@ -469,12 +448,6 @@ export default function Dashboard() {
     switch (status.nextStep) {
       case "KYC":
         navigate("/kyc", {
-          replace: true,
-        });
-        break;
-
-      case "BANK":
-        navigate("/bank-accounts", {
           replace: true,
         });
         break;

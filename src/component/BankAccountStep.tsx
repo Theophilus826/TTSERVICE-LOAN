@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import {
   CheckCircle,
@@ -36,8 +37,6 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
   selectedBankAccountId,
   onSelect,
 }) => {
-  console.log("BankAccountStep onSelect:", onSelect);
-  console.log("typeof onSelect:", typeof onSelect);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
 
@@ -54,17 +53,16 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
       setLoading(true);
 
       const response = await bankApi.getMyBankAccounts();
-
       const data = response?.data ?? response ?? [];
 
-      setAccounts(Array.isArray(data) ? data : []);
+      const accountList = Array.isArray(data) ? data : [];
 
-      const verifiedPrimary = Array.isArray(data)
-        ? data.find(
-            (account: BankAccount) =>
-              account.verificationStatus === "verified" && account.isPrimary,
-          )
-        : null;
+      setAccounts(accountList);
+
+      const verifiedPrimary = accountList.find(
+        (account: BankAccount) =>
+          account.verificationStatus === "verified" && account.isPrimary,
+      );
 
       if (verifiedPrimary) {
         onSelect(verifiedPrimary._id);
@@ -85,7 +83,6 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
       setLoadingBanks(true);
 
       const response = await bankApi.getBanks();
-
       const data = response?.data ?? response ?? [];
 
       setBanks(Array.isArray(data) ? data : []);
@@ -113,7 +110,9 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
   };
 
   const handleBankChange = (bankCode: string) => {
-    const bank = banks.find((item) => String(item.code) === String(bankCode));
+    const bank = banks.find(
+      (item) => String(item.code) === String(bankCode),
+    );
 
     setForm((previous) => ({
       ...previous,
@@ -176,7 +175,6 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
       setVerifyingId(accountId);
 
       const response = await bankApi.verifyBankAccount(accountId);
-
       const verifiedAccount = response?.data;
 
       toast.success("Bank account verified successfully");
@@ -281,7 +279,9 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
 
       {showForm && (
         <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <h3 className="mb-4 font-semibold text-gray-900">Add Bank Account</h3>
+          <h3 className="mb-4 font-semibold text-gray-900">
+            Add Bank Account
+          </h3>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
@@ -318,7 +318,10 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
                 maxLength={10}
                 value={form.accountNumber}
                 onChange={(e) =>
-                  updateForm("accountNumber", e.target.value.replace(/\D/g, ""))
+                  updateForm(
+                    "accountNumber",
+                    e.target.value.replace(/\D/g, ""),
+                  )
                 }
                 disabled={submitting}
                 className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
@@ -377,7 +380,9 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
               disabled={submitting}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {submitting && <Loader2 size={16} className="animate-spin" />}
+              {submitting && (
+                <Loader2 size={16} className="animate-spin" />
+              )}
               Add Account
             </button>
           </div>
@@ -390,7 +395,9 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
         </div>
       ) : accounts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
-          <p className="font-medium text-gray-700">No bank account added yet</p>
+          <p className="font-medium text-gray-700">
+            No bank account added yet
+          </p>
 
           <p className="mt-1 text-sm text-gray-500">
             Add a bank account to continue.
@@ -400,7 +407,6 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
         <div className="space-y-4">
           {accounts.map((account) => {
             const verified = account.verificationStatus === "verified";
-
             const selected = account._id === selectedBankAccountId;
 
             return (
@@ -417,7 +423,10 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
                   <div className="flex items-start gap-3">
                     <div className="mt-1">
                       {verified ? (
-                        <CheckCircle className="text-green-600" size={22} />
+                        <CheckCircle
+                          className="text-green-600"
+                          size={22}
+                        />
                       ) : (
                         <div className="h-5 w-5 rounded-full border-2 border-yellow-500" />
                       )}
@@ -491,29 +500,7 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
                     {verified && (
                       <button
                         type="button"
-                        onClick={() => {
-                          console.log("=== BankAccountStep Select Click ===");
-                          console.log("account._id:", account._id);
-                          console.log("onSelect:", onSelect);
-                          console.log("typeof onSelect:", typeof onSelect);
-
-                          if (typeof onSelect !== "function") {
-                            console.error("ERROR: onSelect is not a function", {
-                              onSelect,
-                              accountId: account._id,
-                            });
-
-                            alert(
-                              `onSelect is ${typeof onSelect}. Check the browser console.`,
-                            );
-
-                            return;
-                          }
-
-                          console.log("Calling onSelect with:", account._id);
-
-                          onSelect(account._id);
-                        }}
+                        onClick={() => onSelect(account._id)}
                         className={[
                           "rounded-lg px-4 py-2 text-sm font-medium",
                           selected
@@ -549,8 +536,8 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
 
               {!canContinue && (
                 <p className="mt-1 text-sm text-green-800">
-                  This account must be verified and primary before you continue
-                  to BVN verification.
+                  This account must be verified and primary before you
+                  continue to BVN verification.
                 </p>
               )}
             </div>
@@ -562,3 +549,4 @@ const BankAccountStep: React.FC<BankAccountStepProps> = ({
 };
 
 export default BankAccountStep;
+

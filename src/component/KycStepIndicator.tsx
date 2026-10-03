@@ -1,80 +1,73 @@
-
 import React from "react";
+import { Check } from "lucide-react";
 
-type Step = {
+export interface KycStep {
   number: number;
   title: string;
-};
+}
 
-type KycStepIndicatorProps = {
-  currentStep: number;
-  steps?: Step[];
-};
-
-const defaultSteps: Step[] = [
+export const KYC_STEPS: KycStep[] = [
   { number: 1, title: "Personal" },
   { number: 2, title: "Identity" },
-  { number: 3, title: "Bank Account" },
+  { number: 3, title: "Bank" },
   { number: 4, title: "BVN" },
-  { number: 5, title: "Face Verification" },
+  { number: 5, title: "Face" },
 ];
+
+interface KycStepIndicatorProps {
+  currentStep: number;
+  steps?: KycStep[];
+}
 
 const KycStepIndicator: React.FC<KycStepIndicatorProps> = ({
   currentStep,
-  steps = defaultSteps,
+  steps = KYC_STEPS,
 }) => {
-  // Keep the step within the valid KYC range.
-  const safeCurrentStep = Math.min(
-    Math.max(currentStep, 1),
-    steps.length,
-  );
-
   return (
     <div className="w-full">
-      <div className="flex w-full items-start">
+      <div className="flex items-start justify-between">
         {steps.map((step, index) => {
-          const isCompleted =
-            safeCurrentStep > step.number;
-
-          const isCurrent =
-            safeCurrentStep === step.number;
-
-          const isLast =
-            index === steps.length - 1;
+          const completed = currentStep > step.number;
+          const active = currentStep === step.number;
 
           return (
             <React.Fragment key={step.number}>
-              {/* Step */}
-              <div className="flex min-w-0 flex-shrink-0 flex-col items-center">
+              <div className="flex min-w-0 flex-col items-center">
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-semibold transition sm:h-10 sm:w-10 sm:text-sm ${
-                    isCompleted || isCurrent
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-gray-300 bg-white text-gray-500"
-                  }`}
+                  className={[
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition-all",
+                    completed
+                      ? "border-green-600 bg-green-600 text-white"
+                      : active
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 bg-white text-gray-500",
+                  ].join(" ")}
                 >
-                  {isCompleted ? "✓" : step.number}
+                  {completed ? <Check size={17} /> : step.number}
                 </div>
 
                 <span
-                  className={`mt-2 max-w-[70px] text-center text-[10px] font-medium leading-tight sm:max-w-[110px] sm:text-xs ${
-                    isCurrent || isCompleted
+                  className={[
+                    "mt-2 text-center text-xs font-medium",
+                    active
                       ? "text-blue-600"
-                      : "text-gray-500"
-                  }`}
+                      : completed
+                        ? "text-green-600"
+                        : "text-gray-500",
+                  ].join(" ")}
                 >
                   {step.title}
                 </span>
               </div>
 
-              {/* Connector */}
-              {!isLast && (
+              {index < steps.length - 1 && (
                 <div
-                  className={`mx-1 mt-4 h-0.5 min-w-0 flex-1 sm:mx-2 sm:mt-5 ${
-                    safeCurrentStep > step.number
-                      ? "bg-blue-600"
-                      : "bg-gray-300"
-                  }`}
+                  className={[
+                    "mx-2 mt-[18px] h-0.5 flex-1 transition-all",
+                    currentStep > step.number
+                      ? "bg-green-600"
+                      : "bg-gray-200",
+                  ].join(" ")}
                 />
               )}
             </React.Fragment>

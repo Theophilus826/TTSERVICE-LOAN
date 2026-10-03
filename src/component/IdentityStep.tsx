@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState } from "react";
 
 export interface IdentityFormData {
   address: string;
@@ -21,16 +21,47 @@ interface IdentityStepProps {
     field: keyof IdentityFormData,
     value: string,
   ) => void;
+  onComplete: (form: IdentityFormData) => void | Promise<void>;
+  saving?: boolean;
   errors?: Record<string, string>;
 }
 
 const IdentityStep: React.FC<IdentityStepProps> = ({
   form,
   onChange,
+  onComplete,
+  saving = false,
   errors = {},
 }) => {
+  const [localErrors, setLocalErrors] =
+    useState<Record<string, string>>({});
+
+  const validate = () => {
+    const validationErrors: Record<string, string> = {};
+
+    if (!form.address.trim()) validationErrors.address = "Address is required.";
+    if (!form.city.trim()) validationErrors.city = "City is required.";
+    if (!form.state.trim()) validationErrors.state = "State is required.";
+    if (!form.idType) validationErrors.idType = "Select an ID type.";
+    if (!form.idNumber.trim()) validationErrors.idNumber = "ID number is required.";
+
+    setLocalErrors(validationErrors);
+    return Object.keys(validationErrors).length === 0;
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (validate()) {
+      await onComplete(form);
+    }
+  };
+
+  const getError = (field: keyof IdentityFormData) =>
+    errors[field] || localErrors[field];
+
   return (
-    <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">
           Address & Identity
@@ -46,13 +77,17 @@ const IdentityStep: React.FC<IdentityStepProps> = ({
         </label>
         <textarea
           value={form.address}
-          onChange={(e) => onChange("address", e.target.value)}
+          onChange={(e) => {
+            onChange("address", e.target.value);
+            setLocalErrors((previous) => ({ ...previous, address: "" }));
+          }}
           rows={3}
+          disabled={saving}
           className="w-full resize-none rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
           placeholder="Enter your residential address"
         />
-        {errors.address && (
-          <p className="mt-1 text-sm text-red-600">{errors.address}</p>
+        {getError("address") && (
+          <p className="mt-1 text-sm text-red-600">{getError("address")}</p>
         )}
       </div>
 
@@ -64,7 +99,11 @@ const IdentityStep: React.FC<IdentityStepProps> = ({
           <input
             type="text"
             value={form.city}
-            onChange={(e) => onChange("city", e.target.value)}
+            onChange={(e) => {
+              onChange("city", e.target.value);
+              setLocalErrors((previous) => ({ ...previous, city: "" }));
+            }}
+            disabled={saving}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
             placeholder="City"
           />
@@ -77,7 +116,11 @@ const IdentityStep: React.FC<IdentityStepProps> = ({
           <input
             type="text"
             value={form.state}
-            onChange={(e) => onChange("state", e.target.value)}
+            onChange={(e) => {
+              onChange("state", e.target.value);
+              setLocalErrors((previous) => ({ ...previous, state: "" }));
+            }}
+            disabled={saving}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
             placeholder="State"
           />
@@ -91,6 +134,7 @@ const IdentityStep: React.FC<IdentityStepProps> = ({
             type="text"
             value={form.country}
             onChange={(e) => onChange("country", e.target.value)}
+            disabled={saving}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
             placeholder="Country"
           />
@@ -105,7 +149,11 @@ const IdentityStep: React.FC<IdentityStepProps> = ({
 
           <select
             value={form.idType}
-            onChange={(e) => onChange("idType", e.target.value)}
+            onChange={(e) => {
+              onChange("idType", e.target.value);
+              setLocalErrors((previous) => ({ ...previous, idType: "" }));
+            }}
+            disabled={saving}
             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-blue-500"
           >
             <option value="">Select ID type</option>
@@ -117,8 +165,8 @@ const IdentityStep: React.FC<IdentityStepProps> = ({
             <option value="voters_card">Voter's Card</option>
           </select>
 
-          {errors.idType && (
-            <p className="mt-1 text-sm text-red-600">{errors.idType}</p>
+          {getError("idType") && (
+            <p className="mt-1 text-sm text-red-600">{getError("idType")}</p>
           )}
         </div>
 
@@ -130,19 +178,33 @@ const IdentityStep: React.FC<IdentityStepProps> = ({
           <input
             type="text"
             value={form.idNumber}
-            onChange={(e) => onChange("idNumber", e.target.value)}
+            onChange={(e) => {
+              onChange("idNumber", e.target.value);
+              setLocalErrors((previous) => ({ ...previous, idNumber: "" }));
+            }}
+            disabled={saving}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
             placeholder="Enter identification number"
           />
 
-          {errors.idNumber && (
+          {getError("idNumber") && (
             <p className="mt-1 text-sm text-red-600">
-              {errors.idNumber}
+              {getError("idNumber")}
             </p>
           )}
         </div>
       </div>
-    </div>
+
+      <div className="flex justify-end border-t pt-6">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Continue"}
+        </button>
+      </div>
+    </form>
   );
 };
 

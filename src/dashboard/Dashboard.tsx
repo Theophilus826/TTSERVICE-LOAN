@@ -16,6 +16,7 @@ import myLoanApi, {
   type LoanDashboard,
   getRepaymentSchedule,
 } from "../services/myLoanApi";
+import Header from "../component/Header";
 
 // =========================================================
 // COMPONENT
@@ -238,7 +239,10 @@ export default function Dashboard() {
 
   const summary = loanDashboard?.summary;
 
-  const totalBorrowed = summary?.totalBorrowed ?? 0;
+  const totalBorrowed =
+    summary?.totalBorrowed ??
+    summary?.totalPrincipal ??
+    0;
 
   const totalPaid = summary?.totalPaid ?? 0;
 
@@ -528,33 +532,7 @@ export default function Dashboard() {
           HEADER
       ===================================================== */}
 
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-xl font-black text-slate-950">Toans</h1>
-
-            <p className="text-xs text-slate-500">Loan platform</p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold text-slate-900">
-                {user?.firstName} {user?.lastName}
-              </p>
-
-              <p className="text-xs text-slate-500">{user?.email}</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="mx-auto max-w-7xl px-6 py-10">
         {/* ===================================================

@@ -349,6 +349,7 @@ export interface LoanDashboardSummary {
   completedLoans?: number;
 
   totalBorrowed?: number;
+  totalPrincipal?: number;
   totalPaid?: number;
   totalOutstanding?: number;
 }

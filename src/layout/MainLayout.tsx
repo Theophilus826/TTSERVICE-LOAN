@@ -1,7 +1,7 @@
 
 import { Outlet } from "react-router-dom";
 
-import Header from "../component/Header";
+
 import CustomerBottomNav from "../dashboard/ButtomNarve";
 
 /* =========================================================
@@ -15,7 +15,7 @@ export default function MainLayout() {
           HEADER
       ===================================================== */}
 
-      <Header />
+      
 
       {/* =====================================================
           MAIN CONTENT

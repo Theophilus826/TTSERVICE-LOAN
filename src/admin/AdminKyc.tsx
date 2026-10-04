@@ -69,6 +69,24 @@ interface RepaymentAccount {
   dvaStatus?: DvaStatus;
 }
 
+interface RetryDvaResponse {
+  success?: boolean;
+  status?: DvaStatus;
+  message?: string;
+  account?: {
+    accountId: string;
+    accountNumber?: string | null;
+    accountName?: string | null;
+    bankName?: string | null;
+    bankCode?: string | null;
+    currency?: string | null;
+    provider?: string | null;
+    providerCustomerCode?: string | null;
+    providerAccountId?: string | null;
+    dvaStatus?: DvaStatus;
+  };
+}
+
 interface Kyc {
   _id: string;
 
@@ -171,6 +189,8 @@ export default function AdminKyc() {
     provisioningAccounts,
     setProvisioningAccounts,
   ] = useState(false);
+  const [retryingDvaUserId, setRetryingDvaUserId] =
+    useState<string | null>(null);
 
   /* =======================================================
      ERROR MESSAGE
@@ -320,6 +340,63 @@ export default function AdminKyc() {
         setProvisioningAccounts(false);
       }
     };
+
+  const retryDva = async (kyc: Kyc) => {
+    const userId = kyc.user?._id;
+
+    if (!userId) {
+      toast.error("Borrower account could not be identified");
+      return;
+    }
+
+    try {
+      setRetryingDvaUserId(userId);
+
+      const response = await API.post<RetryDvaResponse>(
+        `/repayment-account/${userId}/retry-dva`
+      );
+      const result = response.data;
+      const account = result?.account;
+
+      if (account) {
+        setKycs((currentKycs) =>
+          currentKycs.map((item) =>
+            item.user?._id === userId
+              ? {
+                  ...item,
+                  repaymentAccount: {
+                    _id: account.accountId,
+                    accountNumber: account.accountNumber,
+                    accountName: account.accountName,
+                    bankName: account.bankName,
+                    bankCode: account.bankCode,
+                    currency: account.currency,
+                    provider: account.provider,
+                    providerCustomerCode:
+                      account.providerCustomerCode,
+                    providerAccountId:
+                      account.providerAccountId,
+                    dvaStatus:
+                      result.status || account.dvaStatus,
+                  },
+                }
+              : item
+          )
+        );
+      }
+
+      toast.success(
+        result.message || "DVA retry request completed"
+      );
+    } catch (error: unknown) {
+      console.error("Failed to retry DVA:", error);
+      toast.error(
+        getErrorMessage(error) || "Failed to retry DVA"
+      );
+    } finally {
+      setRetryingDvaUserId(null);
+    }
+  };
 
   /* =======================================================
      DATE FORMATTER
@@ -717,16 +794,40 @@ export default function AdminKyc() {
                         </p>
 
                         {repaymentAccount ? (
-                          <span
-                            className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getDvaStatusClass(
-                              repaymentAccount.dvaStatus
-                            )}`}
-                          >
-                            {formatStatus(
-                              repaymentAccount.dvaStatus ||
-                                "pending"
+                          <div className="mt-1 space-y-1">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getDvaStatusClass(
+                                repaymentAccount.dvaStatus
+                              )}`}
+                            >
+                              {formatStatus(
+                                repaymentAccount.dvaStatus ||
+                                  "pending"
+                              )}
+                            </span>
+
+                            {repaymentAccount.accountNumber ? (
+                              <p className="break-all font-mono text-sm font-semibold text-gray-900">
+                                {repaymentAccount.accountNumber}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-gray-500">
+                                Account number pending
+                              </p>
                             )}
-                          </span>
+
+                            {repaymentAccount.bankName && (
+                              <p className="text-xs text-gray-600">
+                                {repaymentAccount.bankName}
+                              </p>
+                            )}
+
+                            {repaymentAccount.accountName && (
+                              <p className="break-words text-xs text-gray-500">
+                                {repaymentAccount.accountName}
+                              </p>
+                            )}
+                          </div>
                         ) : (
                           <span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">
                             Not provisioned
@@ -739,19 +840,45 @@ export default function AdminKyc() {
                         VIEW
                         ================================= */}
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate(
-                          `/admin/kyc/${kyc._id}`
-                        )
-                      }
-                      className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800"
-                    >
-                      <Eye size={17} />
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {kyc.status === "verified" && kyc.user?._id && (
+                        <button
+                          type="button"
+                          onClick={() => void retryDva(kyc)}
+                          disabled={
+                            loading ||
+                            provisioningAccounts ||
+                            retryingDvaUserId === kyc.user._id
+                          }
+                          className="flex items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white px-4 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <RefreshCw
+                            size={17}
+                            className={
+                              retryingDvaUserId === kyc.user._id
+                                ? "animate-spin"
+                                : ""
+                            }
+                          />
+                          {retryingDvaUserId === kyc.user._id
+                            ? "Retrying..."
+                            : "Retry DVA"}
+                        </button>
+                      )}
 
-                      View Details
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            `/admin/kyc/${kyc._id}`
+                          )
+                        }
+                        className="flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800"
+                      >
+                        <Eye size={17} />
+                        View Details
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

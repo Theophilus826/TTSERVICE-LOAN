@@ -36,34 +36,84 @@ export type RepaymentScheduleStatus =
    REPAYMENT SCHEDULE
 ========================================================= */
 
-export type RepaymentSchedule = {
-  _id: string;
-
-  loan?: string;
-
-  loanApplication?: string;
-
-  user?: string;
+export type RepaymentInstallment = {
+  _id?: string;
 
   installmentNumber?: number;
 
-  amountDue: number;
+  dueDate?: string;
 
-  amountPaid?: number;
+  dueAt?: string;
 
-  remainingAmount?: number;
+  finalDueDate?: string;
 
-  totalDue?: number;
+  id?: string;
+
+  principalAmount?: number;
 
   principal?: number;
 
+  interestAmount?: number;
+
   interest?: number;
 
-  penalty?: number;
+  feeAmount?: number;
 
-  dueDate?: string;
+  fees?: number;
+
+  processingFee?: number;
+
+  totalAmount?: number;
+
+  paidAmount?: number;
+
+  remainingAmount?: number;
+
+  total?: number;
+
+  amount?: number;
+
+  paid?: number;
+
+  remaining?: number;
+
+  outstanding?: number;
+
+  status?: string;
 
   paidAt?: string | null;
+};
+
+export type RepaymentSchedule = {
+  _id: string;
+
+  loan?: string | { _id: string; loanNumber?: string };
+
+  loanApplication?:
+    | string
+    | { _id: string; applicationNumber?: string };
+
+  user?: string;
+
+  currency?: string;
+
+  totalRepaymentAmount?: number;
+
+  totalRepayment?: number;
+
+  principalAmount?: number;
+
+  amountPaid?: number;
+
+  amountOutstanding?: number;
+
+  outstandingAmount?: number;
+
+  installments?: RepaymentInstallment[];
+
+  startDate?: string;
+
+  finalDueDate?: string;
 
   status?: RepaymentScheduleStatus | string;
 
@@ -384,10 +434,18 @@ const DVA_URL = "/repayment-account";
 ========================================================= */
 
 const getRepaymentSchedule =
-  async (): Promise<RepaymentScheduleResponse> => {
+  async (
+    repaymentScheduleId: string,
+  ): Promise<RepaymentScheduleResponse> => {
+    if (!repaymentScheduleId) {
+      throw new Error("Repayment schedule ID is required.");
+    }
+
     const response =
       await API.get<RepaymentScheduleResponse>(
-        `${REPAYMENT_URL}/schedule`,
+        `${REPAYMENT_URL}/schedule/${encodeURIComponent(
+          repaymentScheduleId,
+        )}`,
       );
 
     return response.data;
@@ -426,10 +484,16 @@ const initiateRepayment = async ({
 ========================================================= */
 
 const repayFromAccount = async ({
+  repaymentScheduleId,
   amount,
 }: {
+  repaymentScheduleId: string;
   amount: number;
 }): Promise<RepaymentResponse> => {
+  if (!repaymentScheduleId) {
+    throw new Error("Repayment schedule ID is required.");
+  }
+
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("A valid repayment amount is required.");
   }
@@ -438,6 +502,7 @@ const repayFromAccount = async ({
     await API.post<RepaymentResponse>(
       `${REPAYMENT_URL}/account`,
       {
+        repaymentScheduleId,
         amount,
       },
     );

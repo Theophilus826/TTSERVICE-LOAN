@@ -114,18 +114,24 @@ const getInstallmentIcon = (status?: string) => {
 const getInstallmentAmount = (installment: RepaymentInstallment) =>
   Number(
     installment.total ??
+      installment.totalAmount ??
       installment.amount ??
       installment.remaining ??
+      installment.remainingAmount ??
       installment.outstanding ??
       0
   );
 
 const getInstallmentPaid = (installment: RepaymentInstallment) =>
-  Number(installment.paid ?? 0);
+  Number(installment.paid ?? installment.paidAmount ?? 0);
 
 const getInstallmentRemaining = (installment: RepaymentInstallment) => {
   if (installment.remaining !== undefined) {
     return Math.max(Number(installment.remaining), 0);
+  }
+
+  if (installment.remainingAmount !== undefined) {
+    return Math.max(Number(installment.remainingAmount), 0);
   }
 
   if (installment.outstanding !== undefined) {
@@ -169,7 +175,7 @@ const RepaymentSchedule: React.FC = () => {
           repaymentScheduleId
         );
 
-        setSchedule(response.data);
+        setSchedule(response.data ?? null);
       } catch (error) {
         toast.error(
           getApiErrorMessage(
@@ -196,6 +202,10 @@ const RepaymentSchedule: React.FC = () => {
 
   const totalScheduled = useMemo(() => {
     if (!schedule) return 0;
+
+    if (schedule.totalRepaymentAmount !== undefined) {
+      return Number(schedule.totalRepaymentAmount);
+    }
 
     if (schedule.totalRepayment !== undefined) {
       return Number(schedule.totalRepayment);
@@ -351,7 +361,9 @@ const RepaymentSchedule: React.FC = () => {
 
   const canRepay =
     totalOutstanding > 0 &&
-    !["paid", "cancelled", "defaulted"].includes(schedule.status);
+    !["paid", "cancelled", "defaulted"].includes(
+      String(schedule.status || "")
+    );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -519,168 +531,7 @@ const RepaymentSchedule: React.FC = () => {
         </div>
       )}
 
-      <div className="mt-8">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">
-              Installment Schedule
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Review each scheduled repayment and its current status.
-            </p>
-          </div>
-        </div>
-
-        {installments.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-            <CalendarDays className="mx-auto h-10 w-10 text-gray-400" />
-
-            <h3 className="mt-3 font-semibold text-gray-900">
-              No installments found
-            </h3>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Your repayment schedule does not contain any installments yet.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {installments.map(
-              (installment: RepaymentInstallment, index: number) => {
-                const amount = getInstallmentAmount(installment);
-                const paid = getInstallmentPaid(installment);
-                const remaining = getInstallmentRemaining(installment);
-
-                return (
-                  <div
-                    key={
-                      installment._id ||
-                      installment.id ||
-                      `installment-${index}`
-                    }
-                    className={`rounded-2xl border p-5 shadow-sm ${getInstallmentClasses(
-                      installment.status
-                    )}`}
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5">
-                          {getInstallmentIcon(installment.status)}
-                        </div>
-
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold text-gray-900">
-                              Installment{" "}
-                              {installment.installmentNumber ?? index + 1}
-                            </h3>
-
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-xs font-medium ${getStatusClasses(
-                                installment.status
-                              )}`}
-                            >
-                              {formatStatus(installment.status)}
-                            </span>
-                          </div>
-
-                          <div className="mt-2 grid gap-2 text-sm text-gray-600 sm:grid-cols-3">
-                            <span>
-                              Due:{" "}
-                              <strong className="font-medium text-gray-900">
-                                {formatDate(
-                                  installment.dueDate ||
-                                    installment.finalDueDate ||
-                                    installment.dueAt
-                                )}
-                              </strong>
-                            </span>
-
-                            <span>
-                              Paid:{" "}
-                              <strong className="font-medium text-gray-900">
-                                {formatMoney(paid, currency)}
-                              </strong>
-                            </span>
-
-                            <span>
-                              Remaining:{" "}
-                              <strong className="font-medium text-gray-900">
-                                {formatMoney(remaining, currency)}
-                              </strong>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <div className="text-left sm:text-right">
-                          <p className="text-xs text-gray-500">
-                            Scheduled Amount
-                          </p>
-
-                          <p className="font-bold text-gray-900">
-                            {formatMoney(amount, currency)}
-                          </p>
-                        </div>
-
-                        {remaining > 0 &&
-                          !["cancelled", "defaulted"].includes(
-                            String(installment.status)
-                          ) && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handlePayInstallment(installment)
-                              }
-                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                            >
-                              <CreditCard className="h-4 w-4" />
-                              Pay
-                            </button>
-                          )}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 border-t border-gray-200/70 pt-4 text-sm sm:grid-cols-3">
-                      <div className="flex items-center gap-2">
-                        <Banknote className="h-4 w-4 text-gray-500" />
-                        <span className="text-gray-500">Principal</span>
-                        <span className="ml-auto font-medium text-gray-900">
-                          {formatMoney(
-                            installment.principal ?? 0,
-                            currency
-                          )}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500">Interest</span>
-                        <span className="ml-auto font-medium text-gray-900">
-                          {formatMoney(installment.interest ?? 0, currency)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500">Fees</span>
-                        <span className="ml-auto font-medium text-gray-900">
-                          {formatMoney(
-                            installment.fees ??
-                              installment.processingFee ??
-                              0,
-                            currency
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-            )}
-          </div>
-        )}
-      </div>
+      
 
       {schedule.status === "paid" && (
         <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-5">

@@ -73,7 +73,8 @@ const onboardingApi = {
   isKycComplete(status: OnboardingStatus): boolean {
     return (
       status.kyc.completed === true &&
-      status.kyc.status === "VERIFIED"
+      String(status.kyc.status).trim().toUpperCase() ===
+        "VERIFIED"
     );
   },
 

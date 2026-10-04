@@ -1,11 +1,16 @@
+
 import React, { useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import repaymentApi, {
-  type PaymentMethod,
   type RepaymentAccount,
   type RepaymentSchedule,
 } from "../services/repaymentApi";
 
 const MakeRepayment: React.FC = () => {
+  const { repaymentScheduleId = "" } = useParams<{
+    repaymentScheduleId: string;
+  }>();
+
   const [schedule, setSchedule] =
     useState<RepaymentSchedule | null>(null);
 
@@ -20,9 +25,6 @@ const MakeRepayment: React.FC = () => {
 
   const [success, setSuccess] =
     useState<string | null>(null);
-
-  const [paymentMethod, setPaymentMethod] =
-    useState<PaymentMethod>("account");
 
   const [amount, setAmount] = useState("");
 
@@ -39,7 +41,9 @@ const MakeRepayment: React.FC = () => {
         scheduleResponse,
         accountResponse,
       ] = await Promise.all([
-        repaymentApi.getRepaymentSchedule(),
+        repaymentApi.getRepaymentSchedule(
+          repaymentScheduleId,
+        ),
         repaymentApi.getRepaymentAccount(),
       ]);
 
@@ -72,7 +76,7 @@ const MakeRepayment: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [repaymentScheduleId]);
 
   useEffect(() => {
     void loadData();
@@ -107,10 +111,24 @@ const MakeRepayment: React.FC = () => {
     repaymentAccount?.balance ?? 0;
 
   const payableAmount =
-    schedule?.amountDue ??
-    schedule?.remainingAmount ??
-    schedule?.totalDue ??
-    0;
+    schedule?.amountOutstanding ??
+    schedule?.outstandingAmount ??
+    Math.max(
+      Number(
+        schedule?.totalRepaymentAmount ??
+          schedule?.totalRepayment ??
+          0,
+      ) - Number(schedule?.amountPaid ?? 0),
+      0,
+    );
+
+  const nextDueDate =
+    schedule?.installments?.find(
+      (installment) =>
+        !["paid", "cancelled"].includes(
+          String(installment.status),
+        ),
+    )?.dueDate || schedule?.finalDueDate;
 
   const repaymentAmount =
     amount.trim() === ""
@@ -122,24 +140,18 @@ const MakeRepayment: React.FC = () => {
     repaymentAmount > 0;
 
   const hasEnoughBalance =
-    paymentMethod !== "account" ||
     availableBalance >= repaymentAmount;
 
-  const dvaIsActive =
-    repaymentAccount?.dvaStatus === "active";
+  const repaymentAccountIsActive =
+    repaymentAccount?.status === "active";
 
   const canRepay =
     !repaying &&
     !!schedule &&
     isValidAmount &&
     hasEnoughBalance &&
-    (
-      paymentMethod !== "account" ||
-      (
-        !!repaymentAccount &&
-        dvaIsActive
-      )
-    );
+    !!repaymentAccount &&
+    repaymentAccountIsActive;
 
   /* =========================================================
      HANDLE REPAYMENT
@@ -157,6 +169,11 @@ const MakeRepayment: React.FC = () => {
         return;
       }
 
+      if (!repaymentScheduleId) {
+        setError("Repayment schedule was not specified.");
+        return;
+      }
+
       if (!isValidAmount) {
         setError(
           "Enter a valid repayment amount.",
@@ -164,30 +181,21 @@ const MakeRepayment: React.FC = () => {
         return;
       }
 
-      if (
-        paymentMethod === "account" &&
-        !repaymentAccount
-      ) {
+      if (!repaymentAccount) {
         setError(
           "Your repayment account is not available.",
         );
         return;
       }
 
-      if (
-        paymentMethod === "account" &&
-        !dvaIsActive
-      ) {
+      if (!repaymentAccountIsActive) {
         setError(
-          "Your dedicated repayment account is not active yet.",
+          "Your repayment account is not active yet.",
         );
         return;
       }
 
-      if (
-        paymentMethod === "account" &&
-        availableBalance < repaymentAmount
-      ) {
+      if (availableBalance < repaymentAmount) {
         setError(
           `Insufficient repayment account balance. Available balance is ${formatMoney(
             availableBalance,
@@ -198,26 +206,10 @@ const MakeRepayment: React.FC = () => {
 
       setRepaying(true);
 
-      /* =====================================================
-         REPAY FROM DVA / REPAYMENT ACCOUNT
-      ===================================================== */
-
-      if (paymentMethod === "account") {
-        await repaymentApi.repayFromAccount({
-          amount: repaymentAmount,
-        });
-      }
-
-      /* =====================================================
-         CARD / BANK TRANSFER
-      ===================================================== */
-
-      else {
-        await repaymentApi.initiateRepayment({
-          amount: repaymentAmount,
-          paymentMethod,
-        });
-      }
+      await repaymentApi.repayFromAccount({
+        repaymentScheduleId,
+        amount: repaymentAmount,
+      });
 
       setSuccess(
         "Repayment initiated successfully.",
@@ -298,92 +290,7 @@ const MakeRepayment: React.FC = () => {
       )}
 
       {/* =====================================================
-          REPAYMENT SUMMARY
-      ===================================================== */}
-
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
-
-        <h2 className="text-lg font-semibold text-gray-900">
-          Repayment Summary
-        </h2>
-
-        {!schedule ? (
-          <p className="mt-4 text-sm text-gray-500">
-            No active repayment schedule was found.
-          </p>
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-
-            {/* Amount Due */}
-
-            <div className="rounded-lg bg-gray-50 p-4">
-              <p className="text-sm text-gray-500">
-                Amount Due
-              </p>
-
-              <p className="mt-1 text-xl font-bold text-gray-900">
-                {formatMoney(payableAmount)}
-              </p>
-            </div>
-
-            {/* Due Date */}
-
-            {schedule.dueDate && (
-              <div className="rounded-lg bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">
-                  Due Date
-                </p>
-
-                <p className="mt-1 font-semibold text-gray-900">
-                  {new Date(
-                    schedule.dueDate,
-                  ).toLocaleDateString(
-                    "en-NG",
-                  )}
-                </p>
-              </div>
-            )}
-
-            {/* Status */}
-
-            {schedule.status && (
-              <div className="rounded-lg bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">
-                  Status
-                </p>
-
-                <p className="mt-1 font-semibold capitalize text-gray-900">
-                  {String(
-                    schedule.status,
-                  ).replace(
-                    /_/g,
-                    " ",
-                  )}
-                </p>
-              </div>
-            )}
-
-            {/* Remaining */}
-
-            {schedule.remainingAmount != null && (
-              <div className="rounded-lg bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">
-                  Remaining
-                </p>
-
-                <p className="mt-1 font-semibold text-gray-900">
-                  {formatMoney(
-                    schedule.remainingAmount,
-                  )}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* =====================================================
-          DVA / REPAYMENT ACCOUNT
+          1. REPAYMENT ACCOUNT
       ===================================================== */}
 
       <div className="rounded-xl border bg-white p-5 shadow-sm">
@@ -548,136 +455,92 @@ const MakeRepayment: React.FC = () => {
       </div>
 
       {/* =====================================================
-          PAYMENT
+          2. REPAYMENT SUMMARY
       ===================================================== */}
 
       <div className="rounded-xl border bg-white p-5 shadow-sm">
 
         <h2 className="text-lg font-semibold text-gray-900">
-          Payment
+          Repayment Summary
         </h2>
 
-        <div className="mt-5 space-y-5">
+        {!schedule ? (
+          <p className="mt-4 text-sm text-gray-500">
+            No active repayment schedule was found.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
 
-          {/* Payment Method */}
+            {/* Amount Due */}
 
-          <div>
-            <label
-              htmlFor="payment-method"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
-              Payment Method
-            </label>
-
-            <select
-              id="payment-method"
-              value={paymentMethod}
-              onChange={(event) =>
-                setPaymentMethod(
-                  event.target.value as PaymentMethod,
-                )
-              }
-              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-gray-500"
-            >
-              <option value="account">
-                Repayment Account
-              </option>
-
-              <option value="card">
-                Card
-              </option>
-
-              <option value="bank_transfer">
-                Bank Transfer
-              </option>
-            </select>
-          </div>
-
-          {/* Amount */}
-
-          <div>
-            <label
-              htmlFor="repayment-amount"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
-              Amount
-            </label>
-
-            <input
-              id="repayment-amount"
-              type="number"
-              min="0"
-              step="0.01"
-              value={amount}
-              placeholder={String(
-                payableAmount || "",
-              )}
-              onChange={(event) =>
-                setAmount(event.target.value)
-              }
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-gray-500"
-            />
-
-            <p className="mt-2 text-xs text-gray-500">
-              Leave empty to pay the current
-              amount due.
-            </p>
-          </div>
-
-          {/* DVA Balance */}
-
-          {paymentMethod === "account" && (
             <div className="rounded-lg bg-gray-50 p-4">
+              <p className="text-sm text-gray-500">
+                Amount Due
+              </p>
 
-              <div className="flex items-center justify-between gap-4">
-
-                <span className="text-sm text-gray-500">
-                  Account balance
-                </span>
-
-                <span className="font-semibold text-gray-900">
-                  {formatMoney(
-                    availableBalance,
-                  )}
-                </span>
-              </div>
-
-              {!dvaIsActive &&
-                repaymentAccount && (
-                  <p className="mt-2 text-sm text-yellow-700">
-                    Your repayment account is not
-                    active yet.
-                  </p>
-                )}
-
-              {isValidAmount &&
-                !hasEnoughBalance && (
-                  <p className="mt-2 text-sm text-red-600">
-                    Insufficient balance for this
-                    repayment.
-                  </p>
-                )}
+              <p className="mt-1 text-xl font-bold text-gray-900">
+                {formatMoney(payableAmount)}
+              </p>
             </div>
-          )}
 
-          {/* Pay Button */}
+            {/* Due Date */}
 
-          <button
-            type="button"
-            onClick={handleRepayment}
-            disabled={!canRepay}
-            className="w-full rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {repaying
-              ? "Processing..."
-              : `Pay ${formatMoney(
-                  repaymentAmount,
-                )}`}
-          </button>
-        </div>
+            {nextDueDate && (
+              <div className="rounded-lg bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">
+                  Due Date
+                </p>
+
+                <p className="mt-1 font-semibold text-gray-900">
+                  {new Date(
+                    nextDueDate,
+                  ).toLocaleDateString(
+                    "en-NG",
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Status */}
+
+            {schedule.status && (
+              <div className="rounded-lg bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">
+                  Status
+                </p>
+
+                <p className="mt-1 font-semibold capitalize text-gray-900">
+                  {String(
+                    schedule.status,
+                  ).replace(
+                    /_/g,
+                    " ",
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Remaining */}
+
+            {schedule.remainingAmount != null && (
+              <div className="rounded-lg bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">
+                  Remaining
+                </p>
+
+                <p className="mt-1 font-semibold text-gray-900">
+                  {formatMoney(
+                    schedule.remainingAmount,
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default MakeRepayment;
+

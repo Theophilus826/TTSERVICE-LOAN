@@ -30,6 +30,8 @@ import adminLoanApi, {
   type AdminRepaymentSchedule,
 } from "../services/adminLoanApi";
 
+import CollectRepaymentModal from "./CollectRepaymentModal";
+
 const formatMoney = (
   amount?: number | null,
   currency = "NGN"
@@ -177,7 +179,9 @@ const getErrorMessage = (error: any) => {
   );
 };
 
-const getUser = (loan: AdminLoan) => {
+const getUser = (loan: AdminLoan | null | undefined) => {
+  if (!loan) return null;
+
   if (
     loan.user &&
     typeof loan.user !== "string"
@@ -188,7 +192,9 @@ const getUser = (loan: AdminLoan) => {
   return null;
 };
 
-const getProduct = (loan: AdminLoan) => {
+const getProduct = (loan: AdminLoan | null | undefined) => {
+  if (!loan) return null;
+
   if (
     loan.loanProduct &&
     typeof loan.loanProduct !== "string"
@@ -200,8 +206,10 @@ const getProduct = (loan: AdminLoan) => {
 };
 
 const getSchedule = (
-  loan: AdminLoan
+  loan: AdminLoan | null | undefined
 ): AdminRepaymentSchedule | null => {
+  if (!loan) return null;
+
   if (
     loan.repaymentSchedule &&
     typeof loan.repaymentSchedule !== "string"
@@ -241,7 +249,9 @@ const Section = ({
         {action}
       </div>
 
-      <div className="px-6 py-3">{children}</div>
+      <div className="px-6 py-3">
+        {children}
+      </div>
     </section>
   );
 };
@@ -275,16 +285,22 @@ const AdminLoanDetails = () => {
   const [loan, setLoan] =
     useState<AdminLoan | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
+
   const [actionLoading, setActionLoading] =
     useState(false);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   const [showManualModal, setShowManualModal] =
     useState(false);
 
   const [showCancelModal, setShowCancelModal] =
+    useState(false);
+
+  const [showCollectRepayment, setShowCollectRepayment] =
     useState(false);
 
   const [manualReference, setManualReference] =
@@ -352,6 +368,29 @@ const AdminLoanDetails = () => {
   const isSuccessfullyDisbursed =
     loan?.disbursementStatus === "SUCCESS";
 
+  /*
+   * A repayment can only be collected through the
+   * mandate when the loan has an outstanding balance
+   * and the mandate is active/authorized.
+   */
+  const hasActiveMandate =
+    !!loan?.mandate &&
+    ["active", "authorized"].includes(
+      loan.mandate.status || ""
+    );
+
+  const outstandingAmount = Number(
+    loan?.outstandingAmount || 0
+  );
+
+  const canCollectRepayment =
+    !!loan &&
+    ["active", "overdue", "defaulted"].includes(
+      loan.status
+    ) &&
+    outstandingAmount > 0 &&
+    hasActiveMandate;
+
   const canCancel =
     !!loan &&
     ![
@@ -362,11 +401,10 @@ const AdminLoanDetails = () => {
     loan.disbursementStatus !== "SUCCESS";
 
   /**
-   * Start the manual disbursement.
+   * Start manual disbursement.
    *
-   * This does NOT complete the transfer.
-   * It only claims the loan for manual processing
-   * and changes the loan/disbursement status to PROCESSING.
+   * This only claims the loan for manual processing.
+   * It does NOT mark the loan as successfully disbursed.
    */
   const handleStartManualDisbursement =
     async () => {
@@ -382,7 +420,6 @@ const AdminLoanDetails = () => {
           );
 
         setLoan(response.loan);
-
         setShowManualModal(true);
       } catch (err) {
         setError(getErrorMessage(err));
@@ -392,9 +429,8 @@ const AdminLoanDetails = () => {
     };
 
   /**
-   * Complete the manual disbursement after
-   * the administrator has actually transferred
-   * the money to the customer's bank account.
+   * Complete manual disbursement after the actual
+   * bank transfer has been made.
    */
   const handleCompleteManualDisbursement =
     async () => {
@@ -427,10 +463,9 @@ const AdminLoanDetails = () => {
         setShowManualModal(false);
         setManualReference("");
 
-        /**
+        /*
          * The backend creates the repayment schedule
-         * during successful completion. Refetch so the
-         * populated schedule is immediately available.
+         * after successful disbursement.
          */
         await loadLoan();
       } catch (err) {
@@ -440,6 +475,12 @@ const AdminLoanDetails = () => {
       }
     };
 
+  /**
+   * Initiate Paystack disbursement.
+   *
+   * Paystack completion remains webhook-driven.
+   * The frontend does not mark the loan successful.
+   */
   const handlePaystackDisbursement =
     async () => {
       if (!id) return;
@@ -455,14 +496,8 @@ const AdminLoanDetails = () => {
 
         setLoan(response.loan);
 
-        /**
-         * Paystack completion is webhook-driven.
-         * Do not mark the loan successful here.
-         */
         if (response.waitingForWebhook) {
-          setError(
-            ""
-          );
+          setError("");
         }
       } catch (err) {
         setError(getErrorMessage(err));
@@ -496,18 +531,24 @@ const AdminLoanDetails = () => {
   };
 
   /**
-   * Open the manual modal.
-   *
-   * If the loan is still pending, the modal starts
-   * with the "Start Manual Disbursement" action.
-   *
-   * If the loan is already PROCESSING via manual
-   * disbursement, the modal shows the completion form.
+   * Open the manual disbursement modal.
    */
   const openManualModal = () => {
     setError("");
     setManualReference("");
     setShowManualModal(true);
+  };
+
+  /**
+   * Open repayment collection modal.
+   */
+  const openCollectRepaymentModal = () => {
+    if (!canCollectRepayment) {
+      return;
+    }
+
+    setError("");
+    setShowCollectRepayment(true);
   };
 
   if (loading) {
@@ -543,6 +584,7 @@ const AdminLoanDetails = () => {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
+
         {/* Header */}
         <div className="mb-6">
           <button
@@ -577,6 +619,21 @@ const AdminLoanDetails = () => {
             </div>
 
             <div className="flex flex-wrap gap-2">
+
+              {/* Collect repayment */}
+              {canCollectRepayment && (
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={openCollectRepaymentModal}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Receipt size={16} />
+                  Collect Repayment
+                </button>
+              )}
+
+              {/* Refresh */}
               <button
                 type="button"
                 disabled={loading || actionLoading}
@@ -587,6 +644,7 @@ const AdminLoanDetails = () => {
                 Refresh
               </button>
 
+              {/* Cancel */}
               {canCancel && (
                 <button
                   type="button"
@@ -661,7 +719,10 @@ const AdminLoanDetails = () => {
 
         {/* Main */}
         <div className="grid gap-6 lg:grid-cols-3">
+
+          {/* Left */}
           <div className="space-y-6 lg:col-span-2">
+
             {/* Customer */}
             <Section
               title="Customer"
@@ -711,16 +772,12 @@ const AdminLoanDetails = () => {
             >
               <InfoRow
                 label="Loan Product"
-                value={
-                  product?.name || "—"
-                }
+                value={product?.name || "—"}
               />
 
               <InfoRow
                 label="Product Code"
-                value={
-                  product?.code || "—"
-                }
+                value={product?.code || "—"}
               />
 
               <InfoRow
@@ -868,9 +925,7 @@ const AdminLoanDetails = () => {
               {loan.disbursementReason && (
                 <InfoRow
                   label="Reason"
-                  value={
-                    loan.disbursementReason
-                  }
+                  value={loan.disbursementReason}
                 />
               )}
 
@@ -885,15 +940,13 @@ const AdminLoanDetails = () => {
 
                     <div>
                       <p className="font-semibold text-amber-800">
-                        Loan is awaiting
-                        disbursement
+                        Loan is awaiting disbursement
                       </p>
 
                       <p className="mt-1 text-sm leading-6 text-amber-700">
-                        Choose a disbursement method
-                        below. A repayment schedule
-                        is created only after successful
-                        disbursement.
+                        Choose a disbursement method below.
+                        A repayment schedule is created
+                        only after successful disbursement.
                       </p>
                     </div>
                   </div>
@@ -1036,6 +1089,7 @@ const AdminLoanDetails = () => {
 
           {/* Right column */}
           <div className="space-y-6">
+
             {/* Repayment summary */}
             <Section
               title="Repayment Summary"
@@ -1085,6 +1139,93 @@ const AdminLoanDetails = () => {
                 value={loan.numberOfInstallments}
               />
             </Section>
+
+            {/* Repayment mandate */}
+            {loan.mandate && (
+              <Section
+                title="Repayment Mandate"
+                icon={<ShieldCheck size={18} />}
+              >
+                <InfoRow
+                  label="Status"
+                  value={
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                        ["active", "authorized"].includes(
+                          loan.mandate.status || ""
+                        )
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-red-200 bg-red-50 text-red-700"
+                      }`}
+                    >
+                      {formatStatus(
+                        loan.mandate.status
+                      )}
+                    </span>
+                  }
+                />
+
+                <InfoRow
+                  label="Provider"
+                  value={formatStatus(
+                    loan.mandate.provider
+                  )}
+                />
+
+                <InfoRow
+                  label="Mandate Reference"
+                  value={
+                    loan.mandate.mandateReference ||
+                    "—"
+                  }
+                />
+
+                <InfoRow
+                  label="Frequency"
+                  value={formatStatus(
+                    loan.mandate.frequency
+                  )}
+                />
+
+                {loan.mandate.amountLimit !==
+                  undefined && (
+                  <InfoRow
+                    label="Amount Limit"
+                    value={formatMoney(
+                      loan.mandate.amountLimit,
+                      currency
+                    )}
+                  />
+                )}
+
+                {loan.mandate.startDate && (
+                  <InfoRow
+                    label="Start Date"
+                    value={formatDate(
+                      loan.mandate.startDate
+                    )}
+                  />
+                )}
+
+                {loan.mandate.endDate && (
+                  <InfoRow
+                    label="End Date"
+                    value={formatDate(
+                      loan.mandate.endDate
+                    )}
+                  />
+                )}
+
+                {!hasActiveMandate && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs leading-5 text-amber-700">
+                      This mandate is not currently active,
+                      so repayment collection is disabled.
+                    </p>
+                  </div>
+                  )}
+              </Section>
+            )}
 
             {/* Dates */}
             <Section
@@ -1412,6 +1553,31 @@ const AdminLoanDetails = () => {
           />
         </Modal>
       )}
+
+      {/* Collect repayment modal */}
+      {loan && (
+        <CollectRepaymentModal
+          isOpen={showCollectRepayment}
+          loanId={loan._id}
+          loanNumber={loan.loanNumber}
+          outstandingAmount={outstandingAmount}
+          onClose={() => {
+            if (!actionLoading) {
+              setShowCollectRepayment(false);
+            }
+          }}
+          onSuccess={() => {
+            setShowCollectRepayment(false);
+
+            /*
+             * The repayment is initially processing.
+             * Paystack webhook is responsible for settling
+             * the repayment and updating the loan.
+             */
+            loadLoan();
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -1632,7 +1798,7 @@ const Modal = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
             ×
           </button>

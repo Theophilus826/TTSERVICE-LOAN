@@ -35,24 +35,42 @@ interface LedgerEntry {
 interface LedgerResponse {
   success: boolean;
   data: LedgerEntry[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
 }
 
 export default function AdminLedger() {
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<LedgerResponse["pagination"]>();
+  const [error, setError] = useState<string | null>(null);
 
-  const loadLedger = async () => {
+  const loadLedger = async (requestedPage = page) => {
     try {
       setLoading(true);
+      setError(null);
 
       const response =
         await API.get<LedgerResponse>(
-          "/ledger/admin"
+          "/admin/ledger",
+          {
+            params: {
+              page: requestedPage,
+              limit: 50,
+            },
+          },
         );
 
       setEntries(
         response.data?.data || []
       );
+      setPagination(response.data?.pagination);
+      setPage(response.data?.pagination?.page ?? requestedPage);
     } catch (error: any) {
       console.error(
         "Failed to load ledger:",
@@ -63,13 +81,17 @@ export default function AdminLedger() {
         error?.response?.data?.message ||
           "Failed to load ledger"
       );
+      setError(
+        error?.response?.data?.message ||
+          "Unable to load ledger entries. Refresh to try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadLedger();
+    void loadLedger(1);
   }, []);
 
   const totals = useMemo(() => {
@@ -166,7 +188,7 @@ export default function AdminLedger() {
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium text-gray-500">
-              Total Debits
+              Page Debits
             </p>
 
             <div className="rounded-xl bg-red-50 p-2 text-red-600">
@@ -184,7 +206,7 @@ export default function AdminLedger() {
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium text-gray-500">
-              Total Credits
+              Page Credits
             </p>
 
             <div className="rounded-xl bg-green-50 p-2 text-green-600">
@@ -202,7 +224,7 @@ export default function AdminLedger() {
         <div className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium text-gray-500">
-              Net Position
+              Page Net
             </p>
 
             <div className="rounded-xl bg-orange-50 p-2 text-orange-600">
@@ -404,6 +426,38 @@ export default function AdminLedger() {
           </div>
         )}
       </div>
+
+      {pagination && pagination.pages > 1 && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <p className="text-sm text-gray-600">
+            Showing page {pagination.page} of {pagination.pages} ({pagination.total.toLocaleString("en-NG")} entries)
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void loadLedger(page - 1)}
+              disabled={loading || page <= 1}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadLedger(page + 1)}
+              disabled={loading || page >= pagination.pages}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

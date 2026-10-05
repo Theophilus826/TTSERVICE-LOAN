@@ -73,6 +73,7 @@ import AdminLayout from "../admin/AdminLayout";
 import AdminDashboard from "../admin/AdminDashboard";
 import AdminUsers from "../admin/AdminUsers";
 import AdminLoans from "../admin/AdminLoans";
+import AdminLoanDetails from "../admin/AdminLoanDetails";
 import AdminOffers from "../admin/AdminOffers";
 import AdminMandates from "../admin/AdminMandates";
 import AdminTransfers from "../admin/AdminTransfers";
@@ -88,6 +89,8 @@ import AdminLoanApplications from "../admin/AdminLoanApplications";
 import AdminDisbursement from "../admin/AdminDisbursement";
 import AdminDisbursementDetails from "../admin/AdminDisbursementDetails";
 import AdminLoanApplicationDetails from "../admin/AdminLoanApplicationDetails";
+import AdminRepaymentsPage from "../admin/AdminRepaymentsPage";
+
 
 /* =========================================================
 ROLE CONFIGURATION
@@ -304,6 +307,8 @@ PUBLIC ROUTES
 
             <Route path="loans" element={<AdminLoans />} />
 
+            <Route path="loans/:id" element={<AdminLoanDetails />} />
+
             {/* =============================================
             LOAN OFFERS
         ============================================= */}
@@ -384,6 +389,12 @@ PUBLIC ROUTES
               path="disbursements/:disbursementId"
               element={<AdminDisbursementDetails />}
             />
+
+            {/* =============================================
+            REPAYMENTS
+        ============================================= */}
+
+            <Route path="repayments" element={<AdminRepaymentsPage />} />
 
             {/* =============================================
             SETTINGS

@@ -98,6 +98,17 @@ export interface AdminRepaymentSchedule {
   installments?: AdminRepaymentInstallment[];
 }
 
+export interface AdminLoanMandate {
+  _id: string;
+  mandateReference?: string;
+  provider?: string;
+  status?: string;
+  amountLimit?: number;
+  frequency?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
 export interface AdminLoan {
   _id: string;
   id?: string;
@@ -172,6 +183,8 @@ export interface AdminLoan {
     | string
     | AdminRepaymentSchedule
     | null;
+
+  mandate?: AdminLoanMandate | null;
 
   createdAt: string;
   updatedAt: string;

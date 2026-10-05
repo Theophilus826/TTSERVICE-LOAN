@@ -11,25 +11,21 @@ import API from "../services/Api";
 interface AuditLog {
   _id: string;
   action?: string;
-  event?: string;
-  description?: string;
+  actorType?: "user" | "admin" | "system" | "provider" | string;
+  actor?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+  } | null;
   resource?: string;
   resourceId?: string;
-
-  status?: string;
-
-  user?: {
-    _id?: string;
-    name?: string;
-    email?: string;
-  };
-
-  performedBy?: {
-    _id?: string;
-    name?: string;
-    email?: string;
-  };
-
+  method?: string | null;
+  route?: string | null;
+  metadata?: {
+    outcome?: string;
+    statusCode?: number;
+    [key: string]: unknown;
+  } | null;
   createdAt?: string;
 }
 
@@ -44,6 +40,8 @@ export default function AdminAudit() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [actorFilter, setActorFilter] = useState("all");
+  const [error, setError] = useState<string | null>(null);
 
   // =========================================================
   // LOAD AUDIT LOGS
@@ -52,6 +50,7 @@ export default function AdminAudit() {
   const loadAuditLogs = async () => {
     try {
       setLoading(true);
+      setError(null);
 
       const response =
         await API.get<AuditResponse>(
@@ -61,9 +60,11 @@ export default function AdminAudit() {
       const result = response.data;
 
       setLogs(
-        result.data ||
-          result.logs ||
-          [],
+        Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result.logs)
+            ? result.logs
+            : [],
       );
     } catch (error: any) {
       console.error(
@@ -74,6 +75,10 @@ export default function AdminAudit() {
       toast.error(
         error?.response?.data?.message ||
           "Failed to load audit logs",
+      );
+      setError(
+        error?.response?.data?.message ||
+          "Unable to load audit logs. Refresh to try again.",
       );
     } finally {
       setLoading(false);
@@ -93,65 +98,48 @@ export default function AdminAudit() {
       const query =
         search.toLowerCase().trim();
 
+      const matchesActor =
+        actorFilter === "all" ||
+        log.actorType === actorFilter;
+
       if (!query) {
-        return true;
+        return matchesActor;
       }
 
-      return (
+      const matchesSearch = (
         log.action
-          ?.toLowerCase()
-          .includes(query) ||
-        log.event
-          ?.toLowerCase()
-          .includes(query) ||
-        log.description
           ?.toLowerCase()
           .includes(query) ||
         log.resource
           ?.toLowerCase()
           .includes(query) ||
-        log.user?.name
+        log.resourceId
           ?.toLowerCase()
           .includes(query) ||
-        log.user?.email
+        log.actorType
           ?.toLowerCase()
           .includes(query) ||
-        log.performedBy?.name
+        log.actor?.name
           ?.toLowerCase()
           .includes(query) ||
-        log.performedBy?.email
+        log.actor?.email
+          ?.toLowerCase()
+          .includes(query) ||
+        log.route
+          ?.toLowerCase()
+          .includes(query) ||
+        log.method
           ?.toLowerCase()
           .includes(query)
       );
+
+      return matchesActor && matchesSearch;
     },
   );
 
   // =========================================================
   // STATUS STYLE
   // =========================================================
-
-  const statusClass = (
-    status?: string,
-  ) => {
-    switch (
-      status?.toLowerCase()
-    ) {
-      case "success":
-      case "successful":
-      case "completed":
-        return "bg-green-100 text-green-700";
-
-      case "failed":
-      case "error":
-        return "bg-red-100 text-red-700";
-
-      case "pending":
-        return "bg-yellow-100 text-yellow-700";
-
-      default:
-        return "bg-gray-100 text-gray-600";
-    }
-  };
 
   // =========================================================
   // ACTION STYLE
@@ -160,10 +148,7 @@ export default function AdminAudit() {
   const formatAction = (
     log: AuditLog,
   ) => {
-    const action =
-      log.action ||
-      log.event ||
-      "System action";
+    const action = log.action || "System action";
 
     return action
       .replace(/_/g, " ")
@@ -180,11 +165,20 @@ export default function AdminAudit() {
     log: AuditLog,
   ) => {
     return (
-      log.performedBy?.name ||
-      log.user?.name ||
+      log.actor?.name ||
+      log.actor?.email ||
+      log.actorType ||
       "System"
     );
   };
+
+  const adminCount = logs.filter(
+    (log) => log.actorType === "admin",
+  ).length;
+
+  const systemCount = logs.filter(
+    (log) => log.actorType === "system",
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -228,7 +222,12 @@ export default function AdminAudit() {
       ===================================================== */}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <button
+          type="button"
+          aria-pressed={actorFilter === "all"}
+          onClick={() => setActorFilter("all")}
+          className={`rounded-2xl bg-white p-5 text-left shadow-sm transition hover:ring-2 hover:ring-orange-200 ${actorFilter === "all" ? "ring-2 ring-orange-400" : ""}`}
+        >
           <p className="text-sm text-gray-500">
             Total Logs
           </p>
@@ -236,60 +235,49 @@ export default function AdminAudit() {
           <p className="mt-2 text-2xl font-bold text-gray-900">
             {logs.length}
           </p>
-        </div>
+        </button>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <button
+          type="button"
+          aria-pressed={actorFilter === "admin"}
+          onClick={() => setActorFilter("admin")}
+          className={`rounded-2xl bg-white p-5 text-left shadow-sm transition hover:ring-2 hover:ring-orange-200 ${actorFilter === "admin" ? "ring-2 ring-orange-400" : ""}`}
+        >
           <p className="text-sm text-gray-500">
-            Successful
+            Admin Actions
           </p>
 
           <p className="mt-2 text-2xl font-bold text-green-600">
             {
-              logs.filter(
-                (log) =>
-                  [
-                    "success",
-                    "successful",
-                    "completed",
-                  ].includes(
-                    log.status
-                      ?.toLowerCase() ||
-                      "",
-                  ),
-              ).length
+              adminCount
             }
           </p>
-        </div>
+        </button>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <button
+          type="button"
+          aria-pressed={actorFilter === "system"}
+          onClick={() => setActorFilter("system")}
+          className={`rounded-2xl bg-white p-5 text-left shadow-sm transition hover:ring-2 hover:ring-orange-200 ${actorFilter === "system" ? "ring-2 ring-orange-400" : ""}`}
+        >
           <p className="text-sm text-gray-500">
-            Failed
+            System Actions
           </p>
 
           <p className="mt-2 text-2xl font-bold text-red-600">
             {
-              logs.filter(
-                (log) =>
-                  [
-                    "failed",
-                    "error",
-                  ].includes(
-                    log.status
-                      ?.toLowerCase() ||
-                      "",
-                  ),
-              ).length
+              systemCount
             }
           </p>
-        </div>
+        </button>
       </div>
 
       {/* =====================================================
           SEARCH
       ===================================================== */}
 
-      <div className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="relative">
+      <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm sm:flex-row">
+        <div className="relative flex-1">
           <Search
             size={18}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -307,7 +295,25 @@ export default function AdminAudit() {
             className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
           />
         </div>
+        <select
+          aria-label="Filter audit logs by actor type"
+          value={actorFilter}
+          onChange={(event) => setActorFilter(event.target.value)}
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+        >
+          <option value="all">All actors</option>
+          <option value="admin">Admins</option>
+          <option value="user">Users</option>
+          <option value="system">System</option>
+          <option value="provider">Providers</option>
+        </select>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* =====================================================
           TABLE
@@ -331,11 +337,7 @@ export default function AdminAudit() {
                 </th>
 
                 <th className="px-5 py-4 text-left font-semibold text-gray-600">
-                  Description
-                </th>
-
-                <th className="px-5 py-4 text-left font-semibold text-gray-600">
-                  Status
+                  Request
                 </th>
 
                 <th className="px-5 py-4 text-left font-semibold text-gray-600">
@@ -348,7 +350,7 @@ export default function AdminAudit() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-5 py-12 text-center text-gray-500"
                   >
                     Loading audit logs...
@@ -358,7 +360,7 @@ export default function AdminAudit() {
                 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-5 py-12 text-center"
                   >
                     <ClipboardList
@@ -371,8 +373,9 @@ export default function AdminAudit() {
                     </p>
 
                     <p className="mt-1 text-sm text-gray-400">
-                      Administrative actions
-                      will appear here.
+                      {error
+                        ? "Audit records could not be loaded."
+                        : "Try a different search or actor filter."}
                     </p>
                   </td>
                 </tr>
@@ -392,16 +395,9 @@ export default function AdminAudit() {
                           )}
                         </p>
 
-                        {log.event &&
-                          log.action &&
-                          log.event !==
-                            log.action && (
-                            <p className="mt-1 text-xs text-gray-400">
-                              {
-                                log.event
-                              }
-                            </p>
-                          )}
+                        <p className="mt-1 text-xs capitalize text-gray-400">
+                          {log.actorType || "unknown actor"}
+                        </p>
                       </td>
 
                       {/* ACTOR */}
@@ -412,11 +408,7 @@ export default function AdminAudit() {
                         </p>
 
                         <p className="text-xs text-gray-500">
-                          {log.performedBy
-                            ?.email ||
-                            log.user
-                              ?.email ||
-                            "-"}
+                          {log.actor?.email || "-"}
                         </p>
                       </td>
 
@@ -441,24 +433,22 @@ export default function AdminAudit() {
                         )}
                       </td>
 
-                      {/* DESCRIPTION */}
-
-                      <td className="max-w-[280px] px-5 py-4 text-gray-600">
-                        {log.description ||
-                          "No description"}
-                      </td>
-
-                      {/* STATUS */}
-
+                      {/* REQUEST */}
                       <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusClass(
-                            log.status,
-                          )}`}
-                        >
-                          {log.status ||
-                            "recorded"}
-                        </span>
+                        <p className="font-medium text-gray-700">
+                          {log.method || "-"}
+                        </p>
+                        <p className="max-w-[280px] truncate text-xs text-gray-500">
+                          {log.route || log.resourceId || "-"}
+                        </p>
+                        {log.metadata?.outcome && (
+                          <p className="mt-1 text-xs capitalize text-gray-500">
+                            {log.metadata.outcome}
+                            {log.metadata.statusCode
+                              ? ` · ${log.metadata.statusCode}`
+                              : ""}
+                          </p>
+                        )}
                       </td>
 
                       {/* DATE */}

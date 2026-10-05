@@ -8,6 +8,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { Link } from "react-router-dom";
 
 import API from "../services/Api";
 
@@ -1000,6 +1001,14 @@ export default function AdminLoanApplications() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      <Link
+                        to={`/admin/loan-applications/${application._id}`}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                      >
+                        <Eye size={16} />
+                        Details
+                      </Link>
+
                       {/* REVIEW */}
 
                       <button

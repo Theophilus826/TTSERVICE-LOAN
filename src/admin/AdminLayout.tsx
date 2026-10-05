@@ -153,6 +153,12 @@ const navigation: readonly NavigationItem[] = [
     permission: "transfers:view",
   },
   {
+  name: "Repayments",
+  path: "/admin/repayments",
+  icon: CreditCard,
+  permission: "transfers:view",
+},
+  {
     name: "Settings",
     path: "/admin/settings",
     icon: Settings,
@@ -227,6 +233,7 @@ function getPageTitle(pathname: string): string {
     "/admin/kyc": "KYC",
     "/admin/bank-accounts": "Bank Verification",
     "/admin/disbursements": "Disbursements",
+    "/admin/repayments": "Repayments",
     "/admin/settings": "Settings",
     "/admin/notifications": "Notifications",
   };

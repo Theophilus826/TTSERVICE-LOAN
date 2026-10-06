@@ -217,8 +217,15 @@ export const getApiErrorMessage = (
         responseData as {
           message?: unknown;
           error?: unknown;
+          data?: {
+            failureReason?: unknown;
+            providerResponse?: {
+              gatewayResponse?: unknown;
+            };
+          };
         };
 
+      // Backend's main message
       if (
         typeof data.message === "string" &&
         data.message.trim()
@@ -226,11 +233,29 @@ export const getApiErrorMessage = (
         return data.message;
       }
 
+      // Backend error field
       if (
         typeof data.error === "string" &&
         data.error.trim()
       ) {
         return data.error;
+      }
+
+      // Repayment failure reason
+      if (
+        typeof data.data?.failureReason === "string" &&
+        data.data.failureReason.trim()
+      ) {
+        return data.data.failureReason;
+      }
+
+      // Paystack gateway response
+      if (
+        typeof data.data?.providerResponse
+          ?.gatewayResponse === "string" &&
+        data.data.providerResponse.gatewayResponse.trim()
+      ) {
+        return data.data.providerResponse.gatewayResponse;
       }
     }
 

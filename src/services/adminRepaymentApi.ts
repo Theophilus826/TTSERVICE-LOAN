@@ -133,11 +133,37 @@ export interface GetAdminRepaymentsParams {
 
 export interface CollectMandateRepaymentResponse {
   repaymentId: string;
+
+  loanId: string;
+
   paymentReference: string;
+
+  providerReference?: string;
+
   amount: number;
+
+  currency: string;
+
   status: AdminRepaymentStatus;
+
   provider: string;
-  providerResponse?: unknown;
+
+  providerStatus?: string | null;
+
+  providerTransactionId?: string | null;
+
+  providerResponse?: {
+    status?: string | null;
+    reference?: string | null;
+    transactionId?: string | null;
+    gatewayResponse?: string | null;
+    gatewayResponseCode?: string | null;
+    responseCode?: string | null;
+    amount?: number | null;
+    currency?: string | null;
+  };
+
+  failureReason?: string | null;
 }
 
 const adminRepaymentApi = {

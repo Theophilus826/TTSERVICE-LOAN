@@ -1561,6 +1561,7 @@ const AdminLoanDetails = () => {
           loanId={loan._id}
           loanNumber={loan.loanNumber}
           outstandingAmount={outstandingAmount}
+          mandateAmountLimit={loan.mandate?.amountLimit}
           onClose={() => {
             if (!actionLoading) {
               setShowCollectRepayment(false);

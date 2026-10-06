@@ -1,8 +1,4 @@
-import React, {
-  FormEvent,
-  useEffect,
-  useState,
-} from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 
 import adminRepaymentApi, {
   CollectMandateRepaymentResponse,
@@ -13,15 +9,12 @@ interface CollectRepaymentModalProps {
   loanId: string;
   loanNumber?: string;
   outstandingAmount: number;
+  mandateAmountLimit?: number | null;
   onClose: () => void;
-  onSuccess?: (
-    result: CollectMandateRepaymentResponse
-  ) => void;
+  onSuccess?: (result: CollectMandateRepaymentResponse) => void;
 }
 
-const formatMoney = (
-  amount: number | undefined | null
-) => {
+const formatMoney = (amount: number | undefined | null) => {
   const numericAmount = Number(amount);
 
   if (!Number.isFinite(numericAmount)) {
@@ -36,21 +29,24 @@ const formatMoney = (
   }).format(numericAmount);
 };
 
-const getErrorMessage = (error: any) => {
+const getErrorMessage = (error: unknown) => {
+  const responseData = (error as any)?.response?.data;
+
   return (
-    error?.response?.data?.message ||
-    error?.message ||
+    responseData?.message ||
+    responseData?.data?.failureReason ||
+    responseData?.data?.providerResponse?.gatewayResponse ||
+    (error as any)?.message ||
     "Unable to initiate repayment."
   );
 };
 
-const CollectRepaymentModal: React.FC<
-  CollectRepaymentModalProps
-> = ({
+const CollectRepaymentModal: React.FC<CollectRepaymentModalProps> = ({
   isOpen,
   loanId,
   loanNumber,
   outstandingAmount,
+  mandateAmountLimit,
   onClose,
   onSuccess,
 }) => {
@@ -60,27 +56,28 @@ const CollectRepaymentModal: React.FC<
 
   const [error, setError] = useState("");
 
-  const [result, setResult] =
-    useState<CollectMandateRepaymentResponse | null>(
-      null
-    );
+  const [result, setResult] = useState<CollectMandateRepaymentResponse | null>(
+    null,
+  );
 
-  const numericOutstandingAmount =
-    Number(outstandingAmount || 0);
+  const numericOutstandingAmount = Number(outstandingAmount || 0);
 
   const numericAmount = Number(amount);
 
   const hasOutstandingBalance =
-    Number.isFinite(
-      numericOutstandingAmount
-    ) &&
-    numericOutstandingAmount > 0;
+    Number.isFinite(numericOutstandingAmount) && numericOutstandingAmount > 0;
+
+  const numericMandateAmountLimit = Number(mandateAmountLimit || 0);
+
+  const maximumCollectibleAmount =
+    numericMandateAmountLimit > 0
+      ? Math.min(numericOutstandingAmount, numericMandateAmountLimit)
+      : numericOutstandingAmount;
 
   const isValidAmount =
     Number.isFinite(numericAmount) &&
     numericAmount > 0 &&
-    numericAmount <=
-      numericOutstandingAmount;
+    numericAmount <= maximumCollectibleAmount;
 
   // =====================================================
   // RESET
@@ -111,9 +108,7 @@ const CollectRepaymentModal: React.FC<
   // SUBMIT
   // =====================================================
 
-  const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>
-  ) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (loading) {
@@ -136,9 +131,7 @@ const CollectRepaymentModal: React.FC<
     // ---------------------------------------------------
 
     if (!hasOutstandingBalance) {
-      setError(
-        "This loan does not have a valid outstanding balance."
-      );
+      setError("This loan does not have a valid outstanding balance.");
 
       return;
     }
@@ -147,25 +140,17 @@ const CollectRepaymentModal: React.FC<
     // Validate amount
     // ---------------------------------------------------
 
-    if (
-      !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
-      setError(
-        "Enter a valid repayment amount."
-      );
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setError("Enter a valid repayment amount.");
 
       return;
     }
 
-    if (
-      numericAmount >
-      numericOutstandingAmount
-    ) {
+    if (numericAmount > maximumCollectibleAmount) {
       setError(
-        `Amount cannot exceed the outstanding balance of ${formatMoney(
-          numericOutstandingAmount
-        )}.`
+        `Amount cannot exceed the maximum collectible amount of ${formatMoney(
+          maximumCollectibleAmount,
+        )}.`,
       );
 
       return;
@@ -178,15 +163,12 @@ const CollectRepaymentModal: React.FC<
     try {
       setLoading(true);
 
-      const repaymentAmount = Number(
-        numericAmount.toFixed(2)
-      );
+      const repaymentAmount = Number(numericAmount.toFixed(2));
 
-      const response =
-        await adminRepaymentApi.collectMandateRepayment(
-          loanId,
-          repaymentAmount
-        );
+      const response = await adminRepaymentApi.collectMandateRepayment(
+        loanId,
+        repaymentAmount,
+      );
 
       setResult(response);
 
@@ -229,7 +211,6 @@ const CollectRepaymentModal: React.FC<
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
-
           {/* Header */}
 
           <div className="border-b border-gray-100 px-6 py-5">
@@ -245,11 +226,7 @@ const CollectRepaymentModal: React.FC<
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                  />
+                  <circle cx="12" cy="12" r="10" />
 
                   <path d="M12 6v6l4 2" />
                 </svg>
@@ -257,11 +234,15 @@ const CollectRepaymentModal: React.FC<
 
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Repayment Initiated
+                  {result.status === "successful"
+                    ? "Repayment Successful"
+                    : "Repayment Initiated"}
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  The mandate charge is being processed.
+                  {result.status === "successful"
+                    ? "The repayment has been successfully confirmed."
+                    : "The mandate charge is being processed."}
                 </p>
               </div>
             </div>
@@ -271,13 +252,10 @@ const CollectRepaymentModal: React.FC<
 
           <div className="p-6">
             <div className="space-y-3 rounded-xl bg-gray-50 p-4">
-
               {/* Loan */}
 
               <div className="flex items-start justify-between gap-4">
-                <span className="text-sm text-gray-500">
-                  Loan
-                </span>
+                <span className="text-sm text-gray-500">Loan</span>
 
                 <span className="text-right text-sm font-medium text-gray-900">
                   {loanNumber || loanId}
@@ -287,9 +265,7 @@ const CollectRepaymentModal: React.FC<
               {/* Amount */}
 
               <div className="flex items-start justify-between gap-4">
-                <span className="text-sm text-gray-500">
-                  Amount
-                </span>
+                <span className="text-sm text-gray-500">Amount</span>
 
                 <span className="text-right text-sm font-semibold text-gray-900">
                   {formatMoney(result.amount)}
@@ -299,9 +275,7 @@ const CollectRepaymentModal: React.FC<
               {/* Status */}
 
               <div className="flex items-start justify-between gap-4">
-                <span className="text-sm text-gray-500">
-                  Status
-                </span>
+                <span className="text-sm text-gray-500">Status</span>
 
                 <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-xs font-semibold capitalize text-yellow-700">
                   {result.status}
@@ -311,9 +285,7 @@ const CollectRepaymentModal: React.FC<
               {/* Reference */}
 
               <div className="flex items-start justify-between gap-4">
-                <span className="text-sm text-gray-500">
-                  Reference
-                </span>
+                <span className="text-sm text-gray-500">Reference</span>
 
                 <span className="max-w-[220px] break-all text-right text-xs font-medium text-gray-900">
                   {result.paymentReference}
@@ -324,9 +296,7 @@ const CollectRepaymentModal: React.FC<
 
               {result.provider && (
                 <div className="flex items-start justify-between gap-4">
-                  <span className="text-sm text-gray-500">
-                    Provider
-                  </span>
+                  <span className="text-sm text-gray-500">Provider</span>
 
                   <span className="text-sm font-medium capitalize text-gray-900">
                     {result.provider}
@@ -343,10 +313,9 @@ const CollectRepaymentModal: React.FC<
               </p>
 
               <p className="mt-1 text-sm leading-6 text-yellow-700">
-                The repayment has not been marked
-                successful yet. The loan balance will only
-                be updated after Paystack confirms the
-                charge through the payment webhook.
+                The repayment has not been marked successful yet. The loan
+                balance will only be updated after Paystack confirms the charge
+                through the payment webhook.
               </p>
             </div>
 
@@ -372,7 +341,6 @@ const CollectRepaymentModal: React.FC<
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
-
         {/* Header */}
 
         <div className="border-b px-6 py-5">
@@ -381,23 +349,17 @@ const CollectRepaymentModal: React.FC<
           </h2>
 
           <p className="mt-1 text-sm leading-6 text-gray-500">
-            Collect repayment using the borrower's active
-            mandate.
+            Collect repayment using the borrower's active mandate.
           </p>
         </div>
 
         {/* Body */}
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5 p-6"
-        >
+        <form onSubmit={handleSubmit} className="space-y-5 p-6">
           {/* Loan */}
 
           <div>
-            <label className="text-sm font-medium text-gray-700">
-              Loan
-            </label>
+            <label className="text-sm font-medium text-gray-700">Loan</label>
 
             <div className="mt-1 rounded-lg bg-gray-50 px-4 py-3 text-sm font-medium text-gray-900">
               {loanNumber || loanId}
@@ -412,9 +374,7 @@ const CollectRepaymentModal: React.FC<
             </label>
 
             <div className="mt-1 rounded-lg bg-gray-50 px-4 py-3 text-lg font-semibold text-gray-900">
-              {formatMoney(
-                numericOutstandingAmount
-              )}
+              {formatMoney(numericOutstandingAmount)}
             </div>
           </div>
 
@@ -438,26 +398,19 @@ const CollectRepaymentModal: React.FC<
                 type="number"
                 min="0.01"
                 max={
-                  hasOutstandingBalance
-                    ? numericOutstandingAmount
-                    : undefined
+                  hasOutstandingBalance ? maximumCollectibleAmount : undefined
                 }
                 step="0.01"
                 inputMode="decimal"
                 value={amount}
                 onChange={(event) => {
-                  setAmount(
-                    event.target.value
-                  );
+                  setAmount(event.target.value);
 
                   if (error) {
                     setError("");
                   }
                 }}
-                disabled={
-                  loading ||
-                  !hasOutstandingBalance
-                }
+                disabled={loading || !hasOutstandingBalance}
                 placeholder="Enter amount"
                 autoComplete="off"
                 className="w-full rounded-lg border border-gray-300 py-3 pl-8 pr-4 text-sm outline-none transition focus:border-gray-900 focus:ring-1 focus:ring-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100"
@@ -465,10 +418,7 @@ const CollectRepaymentModal: React.FC<
             </div>
 
             <p className="mt-1 text-xs text-gray-500">
-              Maximum:{" "}
-              {formatMoney(
-                numericOutstandingAmount
-              )}
+              Maximum: {formatMoney(maximumCollectibleAmount)}
             </p>
           </div>
 
@@ -476,9 +426,7 @@ const CollectRepaymentModal: React.FC<
 
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-              <p className="text-sm text-red-700">
-                {error}
-              </p>
+              <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
 
@@ -486,9 +434,8 @@ const CollectRepaymentModal: React.FC<
 
           <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
             <p className="text-sm leading-6 text-yellow-800">
-              This will initiate a charge against the
-              borrower's repayment mandate. Make sure the
-              amount is correct before continuing.
+              This will initiate a charge against the borrower's repayment
+              mandate. Make sure the amount is correct before continuing.
             </p>
           </div>
 
@@ -506,16 +453,10 @@ const CollectRepaymentModal: React.FC<
 
             <button
               type="submit"
-              disabled={
-                loading ||
-                !hasOutstandingBalance ||
-                !isValidAmount
-              }
+              disabled={loading || !hasOutstandingBalance || !isValidAmount}
               className="flex-1 rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading
-                ? "Initiating..."
-                : "Collect Repayment"}
+              {loading ? "Initiating..." : "Collect Repayment"}
             </button>
           </div>
         </form>

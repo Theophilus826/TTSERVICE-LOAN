@@ -166,16 +166,43 @@ export interface CollectMandateRepaymentResponse {
   failureReason?: string | null;
 }
 
+/**
+ * Response returned when an admin reconciles an existing
+ * Paystack DVA payment against a loan.
+ */
+export interface ReconcilePaymentResponse {
+  loanId: string;
+
+  repaymentId?: string;
+
+  provider: string;
+
+  providerReference: string;
+
+  amount: number;
+
+  currency: string;
+
+  repaymentScheduleId?: string;
+
+  repaymentApplied?: boolean;
+
+  alreadyProcessed?: boolean;
+
+  accountId?: string;
+
+  fundingTransactionId?: string;
+
+  message?: string;
+}
+
 const adminRepaymentApi = {
   async getRepayments(
     params: GetAdminRepaymentsParams = {}
   ): Promise<AdminRepaymentsPagination> {
-    const response = await API.get(
-      "/admin/repayments",
-      {
-        params,
-      }
-    );
+    const response = await API.get("/admin/repayments", {
+      params,
+    });
 
     return response.data.data;
   },
@@ -190,6 +217,26 @@ const adminRepaymentApi = {
       )}/repayments/collect`,
       {
         amount,
+      }
+    );
+
+    return response.data.data;
+  },
+
+  /**
+   * Reconcile a Paystack DVA payment that was credited to the
+   * repayment account but was not applied to the loan.
+   */
+  async reconcilePayment(
+    loanId: string,
+    providerReference: string
+  ): Promise<ReconcilePaymentResponse> {
+    const response = await API.post(
+      `/admin/repayments/loans/${encodeURIComponent(
+        loanId
+      )}/repayments/reconcile`,
+      {
+        providerReference,
       }
     );
 

@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 
 import adminRepaymentApi, {
@@ -15,7 +16,10 @@ import adminRepaymentApi, {
   AdminRepaymentStatus,
 } from "../services/adminRepaymentApi";
 
-const formatMoney = (amount?: number, currency = "NGN") => {
+const formatMoney = (
+  amount?: number,
+  currency = "NGN"
+) => {
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency,
@@ -23,7 +27,9 @@ const formatMoney = (amount?: number, currency = "NGN") => {
   }).format(Number(amount || 0));
 };
 
-const formatLabel = (value?: string | null) =>
+const formatLabel = (
+  value?: string | null
+) =>
   value
     ? value.replace(/_/g, " ")
     : "—";
@@ -33,7 +39,9 @@ const getBorrowerName = (
 ) => {
   const user = repayment.user;
 
-  if (!user) return "Unknown borrower";
+  if (!user) {
+    return "Unknown borrower";
+  }
 
   const fullName = [
     user.firstName,
@@ -79,27 +87,59 @@ const AdminRepaymentsPage = () => {
     AdminRepayment[]
   >([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   const [refreshing, setRefreshing] =
     useState(false);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] =
+    useState("");
 
   const [status, setStatus] = useState<
     AdminRepaymentStatus | ""
   >("");
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] =
+    useState(1);
 
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] =
+    useState(0);
 
   const [totalPages, setTotalPages] =
     useState(1);
 
   const limit = 20;
+
+  /*
+   * ---------------------------------------------------------
+   * RECONCILIATION STATE
+   * ---------------------------------------------------------
+   */
+
+  const [reconciling, setReconciling] =
+    useState(false);
+
+  const [reconcileLoanId, setReconcileLoanId] =
+    useState("");
+
+  const [reconcileReference, setReconcileReference] =
+    useState("");
+
+  const [reconcileMessage, setReconcileMessage] =
+    useState("");
+
+  const [reconcileSuccess, setReconcileSuccess] =
+    useState<boolean | null>(null);
+
+  /*
+   * ---------------------------------------------------------
+   * LOAD REPAYMENTS
+   * ---------------------------------------------------------
+   */
 
   const loadRepayments = useCallback(
     async (showRefresh = false) => {
@@ -119,8 +159,14 @@ const AdminRepaymentsPage = () => {
             limit,
           });
 
-        setRepayments(result.items || []);
-        setTotal(result.total || 0);
+        setRepayments(
+          result.items || []
+        );
+
+        setTotal(
+          result.total || 0
+        );
+
         setTotalPages(
           result.totalPages || 1
         );
@@ -153,30 +199,136 @@ const AdminRepaymentsPage = () => {
   );
 
   useEffect(() => {
-    loadRepayments();
+    void loadRepayments();
   }, [loadRepayments]);
+
+  /*
+   * ---------------------------------------------------------
+   * RECONCILE PAYMENT
+   * ---------------------------------------------------------
+   */
+
+  const handleReconcilePayment =
+    async () => {
+      const loanId =
+        reconcileLoanId.trim();
+
+      const providerReference =
+        reconcileReference.trim();
+
+      if (!loanId) {
+        setReconcileSuccess(false);
+        setReconcileMessage(
+          "Loan ID is required."
+        );
+        return;
+      }
+
+      if (!providerReference) {
+        setReconcileSuccess(false);
+        setReconcileMessage(
+          "Paystack provider reference is required."
+        );
+        return;
+      }
+
+      try {
+        setReconciling(true);
+        setReconcileMessage("");
+        setReconcileSuccess(null);
+        setError("");
+
+        const result =
+          await adminRepaymentApi.reconcilePayment(
+            loanId,
+            providerReference
+          );
+
+        if (result.alreadyProcessed) {
+          setReconcileSuccess(true);
+          setReconcileMessage(
+            "This payment has already been reconciled."
+          );
+        } else {
+          setReconcileSuccess(true);
+          setReconcileMessage(
+            `Payment reconciled successfully. ${formatMoney(
+              result.amount,
+              result.currency || "NGN"
+            )} was applied to the loan.`
+          );
+        }
+
+        /*
+         * Refresh the repayment list so the
+         * newly-created repayment appears.
+         */
+        await loadRepayments(true);
+
+        /*
+         * Clear the form after successful
+         * reconciliation.
+         */
+        setReconcileLoanId("");
+        setReconcileReference("");
+      } catch (error) {
+        console.error(
+          "Failed to reconcile payment:",
+          error
+        );
+
+        const requestError = error as {
+          response?: {
+            data?: {
+              message?: string;
+            };
+          };
+          message?: string;
+        };
+
+        setReconcileSuccess(false);
+
+        setReconcileMessage(
+          requestError.response?.data?.message ||
+            requestError.message ||
+            "Unable to reconcile payment. Please try again."
+        );
+      } finally {
+        setReconciling(false);
+      }
+    };
+
+  /*
+   * ---------------------------------------------------------
+   * SEARCH FILTER
+   * ---------------------------------------------------------
+   */
 
   const filteredRepayments =
     repayments.filter((repayment) => {
-      if (!search.trim()) return true;
+      if (!search.trim()) {
+        return true;
+      }
 
       const query =
         search.trim().toLowerCase();
 
       const borrower =
-        getBorrowerName(repayment).toLowerCase();
+        getBorrowerName(
+          repayment
+        ).toLowerCase();
 
       const loanNumber =
-        repayment.loan?.loanNumber
-          ?.toLowerCase() || "";
+        repayment.loan?.loanNumber?.toLowerCase() ||
+        "";
 
       const paymentReference =
-        repayment.paymentReference
-          ?.toLowerCase() || "";
+        repayment.paymentReference?.toLowerCase() ||
+        "";
 
       const providerReference =
-        repayment.providerReference
-          ?.toLowerCase() || "";
+        repayment.providerReference?.toLowerCase() ||
+        "";
 
       return (
         borrower.includes(query) ||
@@ -185,6 +337,12 @@ const AdminRepaymentsPage = () => {
         providerReference.includes(query)
       );
     });
+
+  /*
+   * ---------------------------------------------------------
+   * STATISTICS
+   * ---------------------------------------------------------
+   */
 
   const processingCount =
     repayments.filter(
@@ -195,7 +353,8 @@ const AdminRepaymentsPage = () => {
 
   const successfulCount =
     repayments.filter(
-      (item) => item.status === "successful"
+      (item) =>
+        item.status === "successful"
     ).length;
 
   const failedCount =
@@ -205,9 +364,18 @@ const AdminRepaymentsPage = () => {
         item.status === "reversed"
     ).length;
 
+  /*
+   * ---------------------------------------------------------
+   * RENDER
+   * ---------------------------------------------------------
+   */
+
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* =====================================================
+          HEADER
+          ===================================================== */}
+
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -221,8 +389,9 @@ const AdminRepaymentsPage = () => {
               </h1>
 
               <p className="text-sm text-gray-500">
-                Monitor loan repayments and
-                mandate collections
+                Monitor loan repayments,
+                mandate collections, and
+                payment reconciliation
               </p>
             </div>
           </div>
@@ -230,9 +399,11 @@ const AdminRepaymentsPage = () => {
 
         <button
           type="button"
-          onClick={() => loadRepayments(true)}
+          onClick={() =>
+            void loadRepayments(true)
+          }
           disabled={refreshing}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             className={`h-4 w-4 ${
@@ -246,25 +417,45 @@ const AdminRepaymentsPage = () => {
         </button>
       </div>
 
+      {/* =====================================================
+          ERROR
+          ===================================================== */}
+
       {error && (
         <div className="flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-red-700">{error}</p>
+          <p className="text-sm text-red-700">
+            {error}
+          </p>
+
           <button
             type="button"
-            onClick={() => void loadRepayments(true)}
-            disabled={loading || refreshing}
+            onClick={() =>
+              void loadRepayments(true)
+            }
+            disabled={
+              loading || refreshing
+            }
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              className={`h-4 w-4 ${
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }`}
             />
+
             Retry
           </button>
         </div>
       )}
 
-      {/* Stats */}
+      {/* =====================================================
+          STATS
+          ===================================================== */}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Total */}
         <div className="rounded-xl border bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -281,6 +472,7 @@ const AdminRepaymentsPage = () => {
           </div>
         </div>
 
+        {/* Processing */}
         <div className="rounded-xl border bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -297,6 +489,7 @@ const AdminRepaymentsPage = () => {
           </div>
         </div>
 
+        {/* Successful */}
         <div className="rounded-xl border bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -313,6 +506,7 @@ const AdminRepaymentsPage = () => {
           </div>
         </div>
 
+        {/* Failed */}
         <div className="rounded-xl border bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -330,9 +524,148 @@ const AdminRepaymentsPage = () => {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* =====================================================
+          PAYMENT RECONCILIATION
+          ===================================================== */}
+
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="rounded-lg bg-blue-100 p-2">
+            <RotateCcw className="h-5 w-5 text-blue-600" />
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Reconcile DVA Payment
+            </h2>
+
+            <p className="mt-1 text-xs leading-5 text-gray-600">
+              Use this when a Paystack DVA
+              payment was successfully credited
+              to a repayment account but was not
+              applied to the borrower&apos;s loan.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {/* Loan ID */}
+          <div>
+            <label
+              htmlFor="reconcile-loan-id"
+              className="mb-1.5 block text-xs font-medium text-gray-700"
+            >
+              Loan ID
+            </label>
+
+            <input
+              id="reconcile-loan-id"
+              type="text"
+              value={reconcileLoanId}
+              onChange={(event) =>
+                setReconcileLoanId(
+                  event.target.value
+                )
+              }
+              placeholder="Enter loan ID"
+              disabled={reconciling}
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+            />
+          </div>
+
+          {/* Provider reference */}
+          <div>
+            <label
+              htmlFor="reconcile-provider-reference"
+              className="mb-1.5 block text-xs font-medium text-gray-700"
+            >
+              Paystack Provider Reference
+            </label>
+
+            <input
+              id="reconcile-provider-reference"
+              type="text"
+              value={reconcileReference}
+              onChange={(event) =>
+                setReconcileReference(
+                  event.target.value
+                )
+              }
+              placeholder="Enter Paystack reference"
+              disabled={reconciling}
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+            />
+          </div>
+
+          {/* Button */}
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() =>
+                void handleReconcilePayment()
+              }
+              disabled={
+                reconciling ||
+                !reconcileLoanId.trim() ||
+                !reconcileReference.trim()
+              }
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RotateCcw
+                className={`h-4 w-4 ${
+                  reconciling
+                    ? "animate-spin"
+                    : ""
+                }`}
+              />
+
+              {reconciling
+                ? "Reconciling..."
+                : "Reconcile Payment"}
+            </button>
+          </div>
+        </div>
+
+        {/* Reconciliation result */}
+        {reconcileMessage && (
+          <div
+            className={`mt-4 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+              reconcileSuccess
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            {reconcileSuccess ? (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+
+            <p>
+              {reconcileMessage}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-3 rounded-lg border border-blue-100 bg-white px-4 py-3">
+          <p className="text-xs leading-5 text-gray-500">
+            The reconciliation amount is
+            determined by the original successful
+            DVA funding transaction on the server.
+            The admin does not enter an amount, which
+            prevents accidentally applying the wrong
+            amount to the loan.
+          </p>
+        </div>
+      </div>
+
+      {/* =====================================================
+          FILTERS
+          ===================================================== */}
+
       <div className="rounded-xl border bg-white p-4">
         <div className="flex flex-col gap-3 md:flex-row">
+          {/* Search */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
@@ -340,13 +673,16 @@ const AdminRepaymentsPage = () => {
               type="text"
               value={search}
               onChange={(event) =>
-                setSearch(event.target.value)
+                setSearch(
+                  event.target.value
+                )
               }
               placeholder="Search loan, borrower or reference..."
               className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
+          {/* Status */}
           <select
             value={status}
             onChange={(event) => {
@@ -387,13 +723,17 @@ const AdminRepaymentsPage = () => {
         </div>
       </div>
 
-      {/* Table */}
+      {/* =====================================================
+          TABLE
+          ===================================================== */}
+
       <div className="overflow-hidden rounded-xl border bg-white">
         {loading ? (
           <div className="flex min-h-[300px] items-center justify-center">
             <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
           </div>
-        ) : filteredRepayments.length === 0 ? (
+        ) : filteredRepayments.length ===
+          0 ? (
           <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
             <AlertCircle className="h-10 w-10 text-gray-300" />
 
@@ -445,6 +785,7 @@ const AdminRepaymentsPage = () => {
                         key={repayment._id}
                         className="hover:bg-gray-50"
                       >
+                        {/* Loan */}
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">
                             {repayment.loan
@@ -453,10 +794,13 @@ const AdminRepaymentsPage = () => {
                           </div>
 
                           <div className="text-xs text-gray-500">
-                            {formatLabel(repayment.repaymentSource)}
+                            {formatLabel(
+                              repayment.repaymentSource
+                            )}
                           </div>
                         </td>
 
+                        {/* Borrower */}
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">
                             {getBorrowerName(
@@ -470,6 +814,7 @@ const AdminRepaymentsPage = () => {
                           </div>
                         </td>
 
+                        {/* Amount */}
                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                           {formatMoney(
                             repayment.amount,
@@ -477,20 +822,27 @@ const AdminRepaymentsPage = () => {
                           )}
                         </td>
 
+                        {/* Method */}
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                          {formatLabel(repayment.paymentMethod)}
+                          {formatLabel(
+                            repayment.paymentMethod
+                          )}
                         </td>
 
+                        {/* Status */}
                         <td className="whitespace-nowrap px-6 py-4">
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${getStatusClasses(
                               repayment.status
                             )}`}
                           >
-                            {formatLabel(repayment.status)}
+                            {formatLabel(
+                              repayment.status
+                            )}
                           </span>
                         </td>
 
+                        {/* Reference */}
                         <td className="whitespace-nowrap px-6 py-4">
                           <div className="max-w-[220px] truncate font-mono text-xs text-gray-600">
                             {repayment.providerReference ||
@@ -505,7 +857,10 @@ const AdminRepaymentsPage = () => {
               </table>
             </div>
 
-            {/* Pagination */}
+            {/* =================================================
+                PAGINATION
+                ================================================= */}
+
             <div className="flex items-center justify-between border-t px-6 py-4">
               <p className="text-sm text-gray-500">
                 Page {page} of{" "}
@@ -518,7 +873,10 @@ const AdminRepaymentsPage = () => {
                   disabled={page <= 1}
                   onClick={() =>
                     setPage((current) =>
-                      Math.max(1, current - 1)
+                      Math.max(
+                        1,
+                        current - 1
+                      )
                     )
                   }
                   className="rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"

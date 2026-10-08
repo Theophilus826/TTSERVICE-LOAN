@@ -1,4 +1,3 @@
-
 import API from "./Api";
 
 // =========================================================
@@ -47,6 +46,107 @@ export type RepaymentInstallmentStatus =
   | "waived";
 
 // =========================================================
+// APPLICATION TYPES
+// =========================================================
+
+export type LoanApplicationStatus =
+  | "submitted"
+  | "pending"
+  | "under_review"
+  | "credit_check"
+  | "approved"
+  | "offer_created"
+  | "rejected"
+  | "cancelled"
+  | "disbursed"
+  | "completed";
+
+export interface CustomerLoanProduct {
+  _id: string;
+  id?: string;
+
+  name?: string;
+  code?: string;
+  currency?: string;
+
+  minAmount?: number;
+  maxAmount?: number;
+
+  minDurationDays?: number;
+  maxDurationDays?: number;
+
+  interestRate?: number;
+  interestType?: string;
+
+  repaymentFrequency?:
+    | RepaymentFrequency
+    | string;
+}
+
+export interface LoanApplicationSummary {
+  _id: string;
+  id?: string;
+
+  applicationNumber?: string;
+
+  amountRequested?: number;
+  durationDays?: number;
+
+  purpose?: string | null;
+
+  monthlyIncome?: number | null;
+  employmentStatus?: string | null;
+
+  status?: LoanApplicationStatus;
+
+  loanProduct?:
+    | string
+    | CustomerLoanProduct
+    | null;
+}
+
+export interface CustomerLoanApplication {
+  _id: string;
+  id?: string;
+
+  applicationNumber?: string;
+
+  loanProduct?:
+    | string
+    | CustomerLoanProduct
+    | null;
+
+  amountRequested?: number;
+  durationDays?: number;
+
+  purpose?: string | null;
+
+  monthlyIncome?: number | null;
+  employmentStatus?: string | null;
+
+  status: LoanApplicationStatus;
+
+  submittedAt?: string | null;
+
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateLoanApplicationPayload {
+  loanProductId: string;
+
+  amountRequested: number;
+
+  durationDays: number;
+
+  purpose?: string;
+
+  monthlyIncome?: number;
+
+  employmentStatus?: string;
+}
+
+// =========================================================
 // RELATED TYPES
 // =========================================================
 
@@ -56,18 +156,6 @@ export interface LoanProductSummary {
   name?: string;
   code?: string;
   currency?: string;
-}
-
-export interface LoanApplicationSummary {
-  _id: string;
-  id?: string;
-  applicationNumber?: string;
-  amountRequested?: number;
-  durationDays?: number;
-  purpose?: string;
-  monthlyIncome?: number;
-  employmentStatus?: string;
-  status?: string;
 }
 
 export interface LoanOfferSummary {
@@ -102,12 +190,6 @@ export interface LoanOfferSummary {
 
 // =========================================================
 // REPAYMENT INSTALLMENT
-// =========================================================
-//
-// Installments are embedded subdocuments inside the
-// RepaymentSchedule document.
-//
-// They are NOT ObjectId references.
 // =========================================================
 
 export interface RepaymentInstallment {
@@ -146,62 +228,30 @@ export interface CustomerRepaymentSchedule {
   _id: string;
   id?: string;
 
-  // -------------------------------------------------------
-  // RELATIONSHIPS
-  // -------------------------------------------------------
-
   user?: string;
   loan?: string;
   loanApplication?: string;
   loanOffer?: string;
   disbursement?: string;
 
-  // -------------------------------------------------------
-  // CURRENCY
-  // -------------------------------------------------------
-
   currency?: string;
-
-  // -------------------------------------------------------
-  // LOAN TOTALS
-  // -------------------------------------------------------
 
   principalAmount: number;
   totalInterest: number;
   totalFees: number;
   totalRepaymentAmount: number;
 
-  // -------------------------------------------------------
-  // PAYMENT TRACKING
-  // -------------------------------------------------------
-
   amountPaid: number;
   amountOutstanding: number;
-
-  // -------------------------------------------------------
-  // STATUS
-  // -------------------------------------------------------
 
   status:
     | RepaymentScheduleStatus
     | string;
 
-  // -------------------------------------------------------
-  // DATES
-  // -------------------------------------------------------
-
   startDate: string;
   finalDueDate: string;
 
-  // -------------------------------------------------------
-  // INSTALLMENTS
-  // -------------------------------------------------------
-
   installments: RepaymentInstallment[];
-
-  // -------------------------------------------------------
-  // TIMESTAMPS
-  // -------------------------------------------------------
 
   createdAt?: string;
   updatedAt?: string;
@@ -215,15 +265,7 @@ export interface CustomerLoan {
   _id: string;
   id?: string;
 
-  // -------------------------------------------------------
-  // IDENTIFICATION
-  // -------------------------------------------------------
-
   loanNumber?: string;
-
-  // -------------------------------------------------------
-  // RELATIONSHIPS
-  // -------------------------------------------------------
 
   user?: string;
 
@@ -246,10 +288,6 @@ export interface CustomerLoan {
     | CustomerRepaymentSchedule
     | null;
 
-  // -------------------------------------------------------
-  // FINANCIAL INFORMATION
-  // -------------------------------------------------------
-
   principalAmount: number;
 
   interestAmount: number;
@@ -264,19 +302,11 @@ export interface CustomerLoan {
 
   outstandingAmount: number;
 
-  // -------------------------------------------------------
-  // PRICING
-  // -------------------------------------------------------
-
   interestRate: number;
 
   interestType:
     | "flat"
     | "reducing_balance";
-
-  // -------------------------------------------------------
-  // REPAYMENT TERMS
-  // -------------------------------------------------------
 
   durationDays: number;
 
@@ -287,15 +317,7 @@ export interface CustomerLoan {
 
   installmentAmount: number;
 
-  // -------------------------------------------------------
-  // LOAN STATUS
-  // -------------------------------------------------------
-
   status: LoanStatus;
-
-  // -------------------------------------------------------
-  // DISBURSEMENT
-  // -------------------------------------------------------
 
   disbursementMethod:
     | DisbursementMethod
@@ -315,25 +337,16 @@ export interface CustomerLoan {
 
   paystackTransferId?: string | null;
 
-  // Backward-compatible aliases.
   transferCode?: string | null;
   transferId?: string | null;
 
   disbursementReason?: string | null;
-
-  // -------------------------------------------------------
-  // DATES
-  // -------------------------------------------------------
 
   disbursedAt?: string | null;
 
   startDate?: string | null;
 
   maturityDate?: string | null;
-
-  // -------------------------------------------------------
-  // TIMESTAMPS
-  // -------------------------------------------------------
 
   createdAt?: string;
   updatedAt?: string;
@@ -361,9 +374,13 @@ export interface LoanDashboard {
 
   activeLoan?: CustomerLoan | null;
 
-  applications?: unknown[];
+  applications?: CustomerLoanApplication[];
 
-  activeApplication?: unknown | null;
+  activeApplication?:
+    | CustomerLoanApplication
+    | null;
+
+  availableProducts?: CustomerLoanProduct[];
 
   summary?: LoanDashboardSummary;
 }
@@ -402,18 +419,6 @@ const unwrapResponse = <T>(
 // =========================================================
 // GET MY LOANS
 // =========================================================
-//
-// GET /api/loans/my
-//
-// Returns loans belonging to the authenticated customer.
-//
-// The backend may populate:
-//
-//   repaymentSchedule
-//   loanOffer
-//   loanApplication
-//   loanProduct
-// =========================================================
 
 const getMyLoans = async (): Promise<
   CustomerLoan[]
@@ -428,12 +433,6 @@ const getMyLoans = async (): Promise<
 
 // =========================================================
 // GET SINGLE LOAN
-// =========================================================
-//
-// GET /api/loans/:id
-//
-// The backend should verify that the requested loan
-// belongs to the authenticated customer.
 // =========================================================
 
 const getMyLoan = async (
@@ -463,20 +462,6 @@ const getMyLoan = async (
 // =========================================================
 // GET LOAN DASHBOARD
 // =========================================================
-//
-// GET /api/loans/dashboard
-//
-// Returns:
-//
-//   - customer loans
-//   - active loans
-//   - active loan
-//   - loan applications
-//   - dashboard summary
-//
-// Loan repayment schedules may be populated by the
-// backend repository.
-// =========================================================
 
 const getLoanDashboard =
   async (): Promise<LoanDashboard> => {
@@ -489,20 +474,188 @@ const getLoanDashboard =
   };
 
 // =========================================================
-// REPAYMENT SCHEDULE HELPERS
+// APPLICATION API
 // =========================================================
 
 /**
- * Returns the repayment schedule ID associated
- * with a loan.
- *
- * Supports:
- *
- * 1. ObjectId string
- * 2. Populated repayment schedule
- * 3. null
- * 4. undefined
+ * Get all applications belonging
+ * to the authenticated customer.
  */
+const getMyApplications = async (): Promise<
+  CustomerLoanApplication[]
+> => {
+  const response =
+    await API.get<
+      ApiResponse<CustomerLoanApplication[]>
+    >("/loan-applications/my");
+
+  return unwrapResponse(response);
+};
+
+/**
+ * Get the customer's active application.
+ *
+ * Returns null when the customer has
+ * no active application.
+ */
+const getMyActiveApplication =
+  async (): Promise<
+    CustomerLoanApplication | null
+  > => {
+    const response =
+      await API.get<
+        ApiResponse<
+          CustomerLoanApplication | null
+        >
+      >(
+        "/loan-applications/my/active",
+      );
+
+    return unwrapResponse(response);
+  };
+
+/**
+ * Get products available for a new
+ * application.
+ *
+ * A completed previous application
+ * does not block this request.
+ */
+const getAvailableLoanProducts =
+  async (): Promise<
+    CustomerLoanProduct[]
+  > => {
+    const response =
+      await API.get<
+        ApiResponse<CustomerLoanProduct[]>
+      >(
+        "/loan-applications/available-products",
+      );
+
+    return unwrapResponse(response);
+  };
+
+/**
+ * Get a single customer application.
+ */
+const getMyApplication = async (
+  applicationId: string,
+): Promise<CustomerLoanApplication> => {
+  if (
+    typeof applicationId !== "string" ||
+    !applicationId.trim()
+  ) {
+    throw new Error(
+      "Application ID is required.",
+    );
+  }
+
+  const response =
+    await API.get<
+      ApiResponse<CustomerLoanApplication>
+    >(
+      `/loan-applications/${encodeURIComponent(
+        applicationId.trim(),
+      )}`,
+    );
+
+  return unwrapResponse(response);
+};
+
+/**
+ * Create a NEW loan application.
+ *
+ * The backend generates the application
+ * number.
+ */
+const createLoanApplication = async (
+  payload: CreateLoanApplicationPayload,
+): Promise<CustomerLoanApplication> => {
+  if (!payload.loanProductId) {
+    throw new Error(
+      "Loan product is required.",
+    );
+  }
+
+  if (
+    !Number.isFinite(
+      Number(payload.amountRequested),
+    ) ||
+    Number(payload.amountRequested) <= 0
+  ) {
+    throw new Error(
+      "A valid loan amount is required.",
+    );
+  }
+
+  if (
+    !Number.isFinite(
+      Number(payload.durationDays),
+    ) ||
+    Number(payload.durationDays) <= 0
+  ) {
+    throw new Error(
+      "A valid loan duration is required.",
+    );
+  }
+
+  const response =
+    await API.post<
+      ApiResponse<CustomerLoanApplication>
+    >(
+      "/loan-applications",
+      payload,
+    );
+
+  return unwrapResponse(response);
+};
+
+// =========================================================
+// APPLICATION STATUS HELPERS
+// =========================================================
+
+export const ACTIVE_APPLICATION_STATUSES:
+  LoanApplicationStatus[] = [
+    "submitted",
+    "pending",
+    "under_review",
+    "credit_check",
+    "approved",
+    "offer_created",
+    "disbursed",
+];
+
+export const isApplicationActive = (
+  application:
+    | CustomerLoanApplication
+    | null
+    | undefined,
+): boolean => {
+  if (!application) {
+    return false;
+  }
+
+  return ACTIVE_APPLICATION_STATUSES.includes(
+    application.status,
+  );
+};
+
+export const isApplicationCompleted = (
+  application:
+    | CustomerLoanApplication
+    | null
+    | undefined,
+): boolean => {
+  return (
+    application?.status ===
+    "completed"
+  );
+};
+
+// =========================================================
+// REPAYMENT SCHEDULE HELPERS
+// =========================================================
+
 export const getRepaymentScheduleId = (
   loan:
     | CustomerLoan
@@ -527,10 +680,6 @@ export const getRepaymentScheduleId = (
   );
 };
 
-/**
- * Determines whether a loan has a repayment
- * schedule attached to it.
- */
 export const hasRepaymentSchedule = (
   loan:
     | CustomerLoan
@@ -543,13 +692,6 @@ export const hasRepaymentSchedule = (
   );
 };
 
-/**
- * Returns the populated repayment schedule.
- *
- * If repaymentSchedule is only an ID, this
- * returns null because the schedule has not
- * been populated.
- */
 export const getRepaymentSchedule = (
   loan:
     | CustomerLoan
@@ -573,12 +715,6 @@ export const getRepaymentSchedule = (
 // INSTALLMENT HELPERS
 // =========================================================
 
-/**
- * Returns the next unpaid installment.
- *
- * An installment is considered unpaid when its
- * status is not "paid" or "waived".
- */
 export const getNextInstallment = (
   loan:
     | CustomerLoan
@@ -601,9 +737,6 @@ export const getNextInstallment = (
   );
 };
 
-/**
- * Returns all unpaid installments.
- */
 export const getUnpaidInstallments = (
   loan:
     | CustomerLoan
@@ -624,9 +757,6 @@ export const getUnpaidInstallments = (
   );
 };
 
-/**
- * Returns all overdue installments.
- */
 export const getOverdueInstallments = (
   loan:
     | CustomerLoan
@@ -650,9 +780,6 @@ export const getOverdueInstallments = (
 // LOAN STATUS HELPERS
 // =========================================================
 
-/**
- * Determines whether the loan is currently active.
- */
 export const isLoanActive = (
   loan:
     | CustomerLoan
@@ -662,9 +789,6 @@ export const isLoanActive = (
   return loan?.status === "active";
 };
 
-/**
- * Determines whether the loan has been completed.
- */
 export const isLoanCompleted = (
   loan:
     | CustomerLoan
@@ -674,9 +798,6 @@ export const isLoanCompleted = (
   return loan?.status === "completed";
 };
 
-/**
- * Determines whether the loan is overdue.
- */
 export const isLoanOverdue = (
   loan:
     | CustomerLoan
@@ -689,10 +810,6 @@ export const isLoanOverdue = (
   );
 };
 
-/**
- * Determines whether the loan has been successfully
- * disbursed.
- */
 export const isLoanDisbursed = (
   loan:
     | CustomerLoan
@@ -718,10 +835,17 @@ export const isLoanDisbursed = (
 // =========================================================
 
 const myLoanApi = {
+  // Loans
   getMyLoans,
   getMyLoan,
   getLoanDashboard,
+
+  // Applications
+  getMyApplications,
+  getMyApplication,
+  getMyActiveApplication,
+  getAvailableLoanProducts,
+  createLoanApplication,
 };
 
 export default myLoanApi;
-

@@ -13,6 +13,13 @@ export interface OnboardingStatus {
   nextStep: OnboardingStep;
   currentStatus: string | null;
 
+  /**
+   * True when the user has fully repaid a previous loan
+   * and does not currently have another active loan,
+   * offer, or application.
+   */
+  canApplyForNewLoan: boolean;
+
   kyc: {
     completed: boolean;
     status:
@@ -31,7 +38,47 @@ export interface OnboardingStatus {
   loan: {
     exists: boolean;
     status: string | null;
+
+    /**
+     * Current loan ID, or the completed loan ID when
+     * there is no active loan.
+     */
     loanId: string | null;
+
+    /**
+     * Current loan application ID.
+     */
+    applicationId: string | null;
+
+    /**
+     * Status of the current loan application.
+     */
+    applicationStatus: string | null;
+
+    /**
+     * Loan product associated with the application/loan.
+     */
+    loanProduct: unknown | null;
+
+    /**
+     * True when the user has a completed loan.
+     */
+    completed: boolean;
+
+    /**
+     * ID of the most recently completed loan.
+     */
+    completedLoanId: string | null;
+
+    /**
+     * Status of the completed loan.
+     */
+    completedLoanStatus: string | null;
+
+    /**
+     * Same eligibility flag exposed at the loan level.
+     */
+    canApplyForNewLoan: boolean;
   };
 
   loanOffer: {
@@ -73,8 +120,7 @@ const onboardingApi = {
   isKycComplete(status: OnboardingStatus): boolean {
     return (
       status.kyc.completed === true &&
-      String(status.kyc.status).trim().toUpperCase() ===
-        "VERIFIED"
+      String(status.kyc.status).trim().toUpperCase() === "VERIFIED"
     );
   },
 
@@ -87,6 +133,29 @@ const onboardingApi = {
       this.isKycComplete(status) &&
       status.bank.completed === true &&
       status.bank.verified === true
+    );
+  },
+
+  /**
+   * The user has completely repaid a previous loan and
+   * is eligible to start a new loan application.
+   */
+  canApplyForNewLoan(status: OnboardingStatus): boolean {
+    return (
+      status.canApplyForNewLoan === true ||
+      status.loan?.canApplyForNewLoan === true
+    );
+  },
+
+  /**
+   * Checks whether the user's previous loan is completed.
+   */
+  isLoanCompleted(status: OnboardingStatus): boolean {
+    return (
+      status.currentStatus === "COMPLETED" ||
+      status.loan?.completed === true ||
+      status.loan?.completedLoanStatus === "completed" ||
+      status.loan?.status === "completed"
     );
   },
 };

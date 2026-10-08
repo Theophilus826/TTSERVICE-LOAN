@@ -2,9 +2,9 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.menumoney',
-  appName: 'TTSERVICE-LOAN',
+  appName: 'TTSERVICE',
   webDir: 'dist',
-  
+
   server: {
     url: "https://ttservice-loan.onrender.com",
     cleartext: false,

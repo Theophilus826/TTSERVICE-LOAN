@@ -76,7 +76,7 @@ export default function Header() {
             className="text-xl font-bold text-orange-500"
             aria-label="Toans dashboard"
           >
-            Toans App
+            LISTEN
           </Link>
 
           <div

@@ -12,10 +12,7 @@ export type RepaymentStatus =
   | "reversed"
   | "cancelled";
 
-export type PaymentMethod =
-  | "account"
-  | "card"
-  | "bank_transfer";
+export type PaymentMethod = "account" | "card" | "bank_transfer";
 
 export type RepaymentSource =
   | "manual"
@@ -89,9 +86,7 @@ export type RepaymentSchedule = {
 
   loan?: string | { _id: string; loanNumber?: string };
 
-  loanApplication?:
-    | string
-    | { _id: string; applicationNumber?: string };
+  loanApplication?: string | { _id: string; applicationNumber?: string };
 
   user?: string;
 
@@ -212,15 +207,9 @@ export type RepaymentScheduleResponse = {
    REPAYMENT ACCOUNT / DVA TYPES
 ========================================================= */
 
-export type DvaStatus =
-  | "pending"
-  | "active"
-  | "failed";
+export type DvaStatus = "pending" | "active" | "failed";
 
-export type RepaymentAccountStatus =
-  | "active"
-  | "suspended"
-  | "closed";
+export type RepaymentAccountStatus = "active" | "suspended" | "closed";
 
 /* =========================================================
    REPAYMENT ACCOUNT / DVA
@@ -433,23 +422,39 @@ const DVA_URL = "/repayment-account";
    REPAYMENT SCHEDULE
 ========================================================= */
 
-const getRepaymentSchedule =
-  async (
-    repaymentScheduleId: string,
-  ): Promise<RepaymentScheduleResponse> => {
-    if (!repaymentScheduleId) {
-      throw new Error("Repayment schedule ID is required.");
-    }
+const getRepaymentSchedule = async (
+  repaymentScheduleId: string,
+): Promise<RepaymentScheduleResponse> => {
+  if (!repaymentScheduleId) {
+    throw new Error("Repayment schedule ID is required.");
+  }
 
-    const response =
-      await API.get<RepaymentScheduleResponse>(
-        `${REPAYMENT_URL}/schedule/${encodeURIComponent(
-          repaymentScheduleId,
-        )}`,
-      );
+  const response = await API.get<RepaymentScheduleResponse>(
+    `${REPAYMENT_URL}/schedule/${encodeURIComponent(repaymentScheduleId)}`,
+  );
 
-    return response.data;
-  };
+  return response.data;
+};
+
+/* =========================================================
+GET ALL MY REPAYMENT SCHEDULES
+========================================================= */
+
+const getMyRepaymentSchedules = async (): Promise<{
+  success: boolean;
+  count?: number;
+  data?: RepaymentSchedule[];
+  message?: string;
+}> => {
+  const response = await API.get<{
+    success: boolean;
+    count?: number;
+    data?: RepaymentSchedule[];
+    message?: string;
+  }>(`${REPAYMENT_URL}/schedule`);
+
+  return response.data;
+};
 
 /* =========================================================
    INITIATE REPAYMENT
@@ -467,14 +472,13 @@ const initiateRepayment = async ({
     throw new Error("A valid repayment amount is required.");
   }
 
-  const response =
-    await API.post<RepaymentResponse>(
-      `${REPAYMENT_URL}/initiate`,
-      {
-        amount,
-        paymentMethod,
-      },
-    );
+  const response = await API.post<RepaymentResponse>(
+    `${REPAYMENT_URL}/initiate`,
+    {
+      amount,
+      paymentMethod,
+    },
+  );
 
   return response.data;
 };
@@ -498,14 +502,13 @@ const repayFromAccount = async ({
     throw new Error("A valid repayment amount is required.");
   }
 
-  const response =
-    await API.post<RepaymentResponse>(
-      `${REPAYMENT_URL}/account`,
-      {
-        repaymentScheduleId,
-        amount,
-      },
-    );
+  const response = await API.post<RepaymentResponse>(
+    `${REPAYMENT_URL}/account`,
+    {
+      repaymentScheduleId,
+      amount,
+    },
+  );
 
   return response.data;
 };
@@ -525,18 +528,14 @@ const getRepayments = async ({
 
   status?: RepaymentStatus;
 } = {}): Promise<RepaymentsResponse> => {
-  const response =
-    await API.get<RepaymentsResponse>(
-      REPAYMENT_URL,
-      {
-        params: {
-          page,
-          limit,
+  const response = await API.get<RepaymentsResponse>(REPAYMENT_URL, {
+    params: {
+      page,
+      limit,
 
-          ...(status ? { status } : {}),
-        },
-      },
-    );
+      ...(status ? { status } : {}),
+    },
+  });
 
   return response.data;
 };
@@ -548,19 +547,13 @@ const getRepayments = async ({
 const getRepayment = async (
   repaymentId: string,
 ): Promise<RepaymentResponse> => {
-  if (
-    typeof repaymentId !== "string" ||
-    !repaymentId.trim()
-  ) {
+  if (typeof repaymentId !== "string" || !repaymentId.trim()) {
     throw new Error("Repayment ID is required.");
   }
 
-  const response =
-    await API.get<RepaymentResponse>(
-      `${REPAYMENT_URL}/${encodeURIComponent(
-        repaymentId.trim(),
-      )}`,
-    );
+  const response = await API.get<RepaymentResponse>(
+    `${REPAYMENT_URL}/${encodeURIComponent(repaymentId.trim())}`,
+  );
 
   return response.data;
 };
@@ -569,15 +562,11 @@ const getRepayment = async (
    GET MY DVA
 ========================================================= */
 
-const getRepaymentAccount =
-  async (): Promise<RepaymentAccountResponse> => {
-    const response =
-      await API.get<RepaymentAccountResponse>(
-        DVA_URL,
-      );
+const getRepaymentAccount = async (): Promise<RepaymentAccountResponse> => {
+  const response = await API.get<RepaymentAccountResponse>(DVA_URL);
 
-    return response.data;
-  };
+  return response.data;
+};
 
 /* =========================================================
    GET DVA BALANCE
@@ -585,10 +574,9 @@ const getRepaymentAccount =
 
 const getRepaymentAccountBalance =
   async (): Promise<RepaymentAccountBalanceResponse> => {
-    const response =
-      await API.get<RepaymentAccountBalanceResponse>(
-        `${DVA_URL}/balance`,
-      );
+    const response = await API.get<RepaymentAccountBalanceResponse>(
+      `${DVA_URL}/balance`,
+    );
 
     return response.data;
   };
@@ -597,70 +585,59 @@ const getRepaymentAccountBalance =
    GET DVA TRANSACTIONS
 ========================================================= */
 
-const getRepaymentAccountTransactions =
-  async ({
-    page = 1,
-    limit = 20,
-    type,
-    status,
-    purpose,
-  }: {
-    page?: number;
+const getRepaymentAccountTransactions = async ({
+  page = 1,
+  limit = 20,
+  type,
+  status,
+  purpose,
+}: {
+  page?: number;
 
-    limit?: number;
+  limit?: number;
 
-    type?: RepaymentAccountTransactionType;
+  type?: RepaymentAccountTransactionType;
 
-    status?: RepaymentAccountTransactionStatus;
+  status?: RepaymentAccountTransactionStatus;
 
-    purpose?: RepaymentAccountTransactionPurpose;
-  } = {}): Promise<RepaymentAccountTransactionsResponse> => {
-    const response =
-      await API.get<RepaymentAccountTransactionsResponse>(
-        `${DVA_URL}/transactions`,
-        {
-          params: {
-            page,
-            limit,
+  purpose?: RepaymentAccountTransactionPurpose;
+} = {}): Promise<RepaymentAccountTransactionsResponse> => {
+  const response = await API.get<RepaymentAccountTransactionsResponse>(
+    `${DVA_URL}/transactions`,
+    {
+      params: {
+        page,
+        limit,
 
-            ...(type ? { type } : {}),
+        ...(type ? { type } : {}),
 
-            ...(status ? { status } : {}),
+        ...(status ? { status } : {}),
 
-            ...(purpose ? { purpose } : {}),
-          },
-        },
-      );
+        ...(purpose ? { purpose } : {}),
+      },
+    },
+  );
 
-    return response.data;
-  };
+  return response.data;
+};
 
 /* =========================================================
    GET SINGLE DVA TRANSACTION
 ========================================================= */
 
-const getRepaymentAccountTransaction =
-  async (
-    transactionId: string,
-  ): Promise<RepaymentAccountTransactionResponse> => {
-    if (
-      typeof transactionId !== "string" ||
-      !transactionId.trim()
-    ) {
-      throw new Error(
-        "Transaction ID is required.",
-      );
-    }
+const getRepaymentAccountTransaction = async (
+  transactionId: string,
+): Promise<RepaymentAccountTransactionResponse> => {
+  if (typeof transactionId !== "string" || !transactionId.trim()) {
+    throw new Error("Transaction ID is required.");
+  }
 
-    const response =
-      await API.get<RepaymentAccountTransactionResponse>(
-        `${DVA_URL}/transactions/${encodeURIComponent(
-          transactionId.trim(),
-        )}`,
-      );
+  const response = await API.get<RepaymentAccountTransactionResponse>(
+    `${DVA_URL}/transactions/${encodeURIComponent(transactionId.trim())}`,
+  );
 
-    return response.data;
-  };
+  return response.data;
+};
 
 /* =========================================================
    EXPORT
@@ -669,6 +646,7 @@ const getRepaymentAccountTransaction =
 const repaymentApi = {
   /* Loan repayment */
   getRepaymentSchedule,
+  getMyRepaymentSchedules,
   initiateRepayment,
   repayFromAccount,
   getRepayments,

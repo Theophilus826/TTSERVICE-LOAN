@@ -16,6 +16,11 @@ import authApi, {
 } from "../services/AuthService";
 
 import {
+  clearLoanWidget,
+  syncLoanWidget,
+} from "../services/loanWidget";
+
+import {
   normalizeNigerianPhone,
   isValidNigerianPhone,
 } from "../services/phone";
@@ -143,6 +148,36 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
   }, []);
 
+    /* =======================================================
+     ANDROID LOAN WIDGET SYNC AND PRIVACY
+  ======================================================= */
+
+  useEffect(() => {
+    const clearWidget = (): void => {
+      void clearLoanWidget().catch(() => {
+        // Do not interrupt logout or session restoration.
+      });
+    };
+
+    const syncWidget = (): void => {
+      if (document.visibilityState === "visible" && user) {
+        void syncLoanWidget().catch((error) => {
+          console.error("Loan widget sync failed:", error);
+        });
+      }
+    };
+
+    if (user) {
+      syncWidget();
+      document.addEventListener("visibilitychange", syncWidget);
+    } else {
+      clearWidget();
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", syncWidget);
+    };
+  }, [user]);
   /* =======================================================
      LOGIN
   ======================================================= */
@@ -238,6 +273,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await authApi.logout();
     } finally {
+      try {
+        await clearLoanWidget();
+      } catch {
+        // Always clear the React session even if widget cleanup fails.
+      }
       /*
        * Always clear the React session,
        * regardless of backend logout result.

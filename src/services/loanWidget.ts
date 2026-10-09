@@ -1,5 +1,4 @@
 
-
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import API from "./Api";
 import repaymentApi, {
@@ -42,7 +41,8 @@ const getInstallmentAmount = (
     return installment.remainingAmount;
   }
 
-  const total = installment.totalAmount ?? installment.total ?? installment.amount;
+  const total =
+    installment.totalAmount ?? installment.total ?? installment.amount;
   const paid = installment.paidAmount ?? installment.paid ?? 0;
 
   if (typeof total !== "number") return 0;
@@ -71,15 +71,15 @@ const getNextInstallment = (schedules: RepaymentSchedule[]) => {
   return candidates
     .filter(({ installment, amount }) => {
       const status = (installment.status ?? "").toLowerCase();
-      return (
-        status !== "paid" &&
-        status !== "waived" &&
-        amount > 0
-      );
+      return status !== "paid" && status !== "waived" && amount > 0;
     })
     .sort((a, b) => {
-      const aTime = a.date ? new Date(a.date).getTime() : Number.MAX_SAFE_INTEGER;
-      const bTime = b.date ? new Date(b.date).getTime() : Number.MAX_SAFE_INTEGER;
+      const aTime = a.date
+        ? new Date(a.date).getTime()
+        : Number.MAX_SAFE_INTEGER;
+      const bTime = b.date
+        ? new Date(b.date).getTime()
+        : Number.MAX_SAFE_INTEGER;
       return aTime - bTime;
     })[0];
 };
@@ -87,9 +87,16 @@ const getNextInstallment = (schedules: RepaymentSchedule[]) => {
 export async function syncLoanWidget(): Promise<void> {
   if (!isNative()) return;
 
-  // Do not replace cached repayment details if the schedule request fails.
+  console.log("[LoanWidget] Sync started");
+
   const scheduleResponse =
     await repaymentApi.getMyRepaymentSchedules();
+
+  console.log("[LoanWidget] Schedule response:", {
+    success: scheduleResponse.success,
+    count: scheduleResponse.count,
+    schedules: scheduleResponse.data?.length,
+  });
 
   const schedules = Array.isArray(scheduleResponse.data)
     ? scheduleResponse.data
@@ -125,6 +132,7 @@ export async function syncLoanWidget(): Promise<void> {
 
     if (next.date) {
       const parsedDate = new Date(next.date);
+
       if (!Number.isNaN(parsedDate.getTime())) {
         dueDate = new Intl.DateTimeFormat("en-NG", {
           day: "numeric",
@@ -134,6 +142,14 @@ export async function syncLoanWidget(): Promise<void> {
       }
     }
   }
+
+  console.log("[LoanWidget] Sending data to native widget:", {
+    amount,
+    dueDate,
+    hasAccount: Boolean(account?.accountNumber),
+    hasBank: Boolean(account?.bankName),
+    hasMessage: Boolean(adminMessage),
+  });
 
   await NativeLoanWidget.updateData({
     amount,

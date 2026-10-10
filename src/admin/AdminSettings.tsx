@@ -18,6 +18,7 @@ supportEmail?: string;
 supportPhone?: string;
 currency?: string;
 widgetMessage?: string;
+floatingReminderEnabled?: boolean;
 maintenanceMode?: boolean;
 allowNewApplications?: boolean;
 allowNewRegistrations?: boolean;
@@ -40,6 +41,7 @@ supportEmail: "",
 supportPhone: "",
 currency: "NGN",
 widgetMessage: DEFAULT_WIDGET_MESSAGE,
+floatingReminderEnabled: false,
 maintenanceMode: false,
 allowNewApplications: true,
 allowNewRegistrations: true,
@@ -355,6 +357,34 @@ return ( <div className="space-y-6">
       </div>
     </div>
   </div>
+
+        {/* FLOATING LOAN REMINDER — ADMIN MASTER SWITCH */}
+
+      <div className="mt-5">
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-gray-100 p-4 hover:bg-gray-50">
+          <div>
+            <p className="font-medium text-gray-900">
+              Enable Floating Loan Reminder
+            </p>
+
+            <p className="text-sm text-gray-500">
+              Allow customers to use the floating reminder when they have an unpaid installment. Customers must enable it themselves and grant Android overlay permission.
+            </p>
+          </div>
+
+          <input
+            type="checkbox"
+            checked={settings.floatingReminderEnabled ?? false}
+            onChange={(event) =>
+              updateSetting(
+                "floatingReminderEnabled",
+                event.target.checked,
+              )
+            }
+            className="h-5 w-5 accent-orange-500"
+          />
+        </label>
+      </div>
 
   {/* REGISTRATION ROLE */}
 

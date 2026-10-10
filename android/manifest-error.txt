@@ -1,0 +1,173 @@
+Initialized native services in: C:\Users\USER\.gradle\native
+Initialized jansi services in: C:\Users\USER\.gradle\native
+The client will now receive all logging from the daemon (pid: 9612). The daemon log file: C:\Users\USER\.gradle\daemon\8.14.3\daemon-9612.out.log
+Starting 4th build in daemon [uptime: 7 mins 11.044 secs, performance: 100%, GC rate: 0.00/s, heap usage: 0% of 1.5 GiB]
+Using 4 worker leases.
+Now considering [C:\Users\USER\Desktop\Soft\toans\android] as hierarchies to watch
+Watching the file system is configured to be enabled if available
+File system watching is active
+Starting Build
+Settings evaluated using settings file 'C:\Users\USER\Desktop\Soft\toans\android\settings.gradle'.
+Projects loaded. Root project using build file 'C:\Users\USER\Desktop\Soft\toans\android\build.gradle'.
+Included projects: [root project 'android', project ':app', project ':capacitor-android', project ':capacitor-cordova-android-plugins']
+
+> Configure project :
+Evaluating root project 'android' using build file 'C:\Users\USER\Desktop\Soft\toans\android\build.gradle'.
+
+> Configure project :app
+Evaluating project ':app' using build file 'C:\Users\USER\Desktop\Soft\toans\android\app\build.gradle'.
+Using default execution profile
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-android
+Evaluating project ':capacitor-android' using build file 'C:\Users\USER\Desktop\Soft\toans\node_modules\@capacitor\android\capacitor\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-cordova-android-plugins
+Evaluating project ':capacitor-cordova-android-plugins' using build file 'C:\Users\USER\Desktop\Soft\toans\android\capacitor-cordova-android-plugins\build.gradle'.
+Using default execution profile
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+All projects evaluated.
+Task name matched 'processDebugMainManifest'
+Selected primary task 'processDebugMainManifest' from project :
+Tasks to be executed: [task ':app:preBuild', task ':app:preDebugBuild', task ':app:generateDebugResValues', task ':app:processDebugGoogleServices', task ':app:extractDeepLinksDebug', task ':capacitor-android:preBuild', task ':capacitor-android:preDebugBuild', task ':capacitor-android:generateDebugResValues', task ':capacitor-android:extractDeepLinksDebug', task ':capacitor-android:processDebugManifest', task ':capacitor-cordova-android-plugins:preBuild', task ':capacitor-cordova-android-plugins:preDebugBuild', task ':capacitor-cordova-android-plugins:generateDebugResValues', task ':capacitor-cordova-android-plugins:extractDeepLinksDebug', task ':capacitor-cordova-android-plugins:processDebugManifest', task ':app:processDebugMainManifest']
+Tasks that were excluded: []
+Resolve mutations for :app:preBuild (Thread[#199,included builds,5,main]) started.
+:app:preBuild (Thread[#199,included builds,5,main]) started.
+
+> Task :app:preBuild UP-TO-DATE
+Skipping task ':app:preBuild' as it has no actions.
+Resolve mutations for :app:preDebugBuild (Thread[#200,Execution worker,5,main]) started.
+:app:preDebugBuild (Thread[#200,Execution worker,5,main]) started.
+
+> Task :app:preDebugBuild UP-TO-DATE
+Skipping task ':app:preDebugBuild' as it has no actions.
+Resolve mutations for :app:generateDebugResValues (Thread[#200,Execution worker,5,main]) started.
+:app:generateDebugResValues (Thread[#200,Execution worker,5,main]) started.
+
+> Task :app:generateDebugResValues UP-TO-DATE
+Caching disabled for task ':app:generateDebugResValues' because:
+  Build cache is disabled
+Skipping task ':app:generateDebugResValues' as it is up-to-date.
+Resolve mutations for :app:processDebugGoogleServices (Thread[#200,Execution worker,5,main]) started.
+:app:processDebugGoogleServices (Thread[#199,included builds,5,main]) started.
+
+> Task :app:processDebugGoogleServices UP-TO-DATE
+Caching disabled for task ':app:processDebugGoogleServices' because:
+  Build cache is disabled
+Skipping task ':app:processDebugGoogleServices' as it is up-to-date.
+Resolve mutations for :app:extractDeepLinksDebug (Thread[#200,Execution worker,5,main]) started.
+:app:extractDeepLinksDebug (Thread[#200,Execution worker,5,main]) started.
+
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+Caching disabled for task ':app:extractDeepLinksDebug' because:
+  Build cache is disabled
+Skipping task ':app:extractDeepLinksDebug' as it is up-to-date.
+Resolve mutations for :capacitor-android:preBuild (Thread[#200,Execution worker,5,main]) started.
+:capacitor-android:preBuild (Thread[#200,Execution worker,5,main]) started.
+
+> Task :capacitor-android:preBuild UP-TO-DATE
+Skipping task ':capacitor-android:preBuild' as it has no actions.
+Resolve mutations for :capacitor-android:preDebugBuild (Thread[#200,Execution worker,5,main]) started.
+:capacitor-android:preDebugBuild (Thread[#200,Execution worker,5,main]) started.
+
+> Task :capacitor-android:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-android:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-android:generateDebugResValues (Thread[#200,Execution worker,5,main]) started.
+:capacitor-android:generateDebugResValues (Thread[#200,Execution worker,5,main]) started.
+
+> Task :capacitor-android:generateDebugResValues UP-TO-DATE
+Caching disabled for task ':capacitor-android:generateDebugResValues' because:
+  Build cache is disabled
+Skipping task ':capacitor-android:generateDebugResValues' as it is up-to-date.
+Resolve mutations for :capacitor-android:extractDeepLinksDebug (Thread[#200,Execution worker,5,main]) started.
+:capacitor-android:extractDeepLinksDebug (Thread[#199,included builds,5,main]) started.
+
+> Task :capacitor-android:extractDeepLinksDebug UP-TO-DATE
+Caching disabled for task ':capacitor-android:extractDeepLinksDebug' because:
+  Build cache is disabled
+Skipping task ':capacitor-android:extractDeepLinksDebug' as it is up-to-date.
+work action resolve navigation.json (project :capacitor-android) (Thread[#199,included builds,5,main]) started.
+Resolve mutations for :capacitor-android:processDebugManifest (Thread[#199,included builds,5,main]) started.
+:capacitor-android:processDebugManifest (Thread[#199,included builds,5,main]) started.
+
+> Task :capacitor-android:processDebugManifest UP-TO-DATE
+Caching disabled for task ':capacitor-android:processDebugManifest' because:
+  Build cache is disabled
+Skipping task ':capacitor-android:processDebugManifest' as it is up-to-date.
+work action resolve AndroidManifest.xml (project :capacitor-android) (Thread[#199,included builds,5,main]) started.
+Resolve mutations for :capacitor-cordova-android-plugins:preBuild (Thread[#199,included builds,5,main]) started.
+:capacitor-cordova-android-plugins:preBuild (Thread[#200,Execution worker,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:preBuild UP-TO-DATE
+Skipping task ':capacitor-cordova-android-plugins:preBuild' as it has no actions.
+Resolve mutations for :capacitor-cordova-android-plugins:preDebugBuild (Thread[#200,Execution worker,5,main]) started.
+:capacitor-cordova-android-plugins:preDebugBuild (Thread[#200,Execution worker,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-cordova-android-plugins:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-cordova-android-plugins:generateDebugResValues (Thread[#200,Execution worker,5,main]) started.
+:capacitor-cordova-android-plugins:generateDebugResValues (Thread[#200,Execution worker,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:generateDebugResValues UP-TO-DATE
+Caching disabled for task ':capacitor-cordova-android-plugins:generateDebugResValues' because:
+  Build cache is disabled
+Skipping task ':capacitor-cordova-android-plugins:generateDebugResValues' as it is up-to-date.
+Resolve mutations for :capacitor-cordova-android-plugins:extractDeepLinksDebug (Thread[#200,Execution worker,5,main]) started.
+:capacitor-cordova-android-plugins:extractDeepLinksDebug (Thread[#200,Execution worker,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:extractDeepLinksDebug UP-TO-DATE
+Caching disabled for task ':capacitor-cordova-android-plugins:extractDeepLinksDebug' because:
+  Build cache is disabled
+Skipping task ':capacitor-cordova-android-plugins:extractDeepLinksDebug' as it is up-to-date.
+work action resolve navigation.json (project :capacitor-cordova-android-plugins) (Thread[#199,included builds,5,main]) started.
+Resolve mutations for :capacitor-cordova-android-plugins:processDebugManifest (Thread[#199,included builds,5,main]) started.
+:capacitor-cordova-android-plugins:processDebugManifest (Thread[#199,included builds,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:processDebugManifest UP-TO-DATE
+Caching disabled for task ':capacitor-cordova-android-plugins:processDebugManifest' because:
+  Build cache is disabled
+Skipping task ':capacitor-cordova-android-plugins:processDebugManifest' as it is up-to-date.
+work action resolve AndroidManifest.xml (project :capacitor-cordova-android-plugins) (Thread[#199,included builds,5,main]) started.
+Resolve mutations for :app:processDebugMainManifest (Thread[#199,included builds,5,main]) started.
+:app:processDebugMainManifest (Thread[#199,included builds,5,main]) started.
+
+> Task :app:processDebugMainManifest FAILED
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\app\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\app\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\app\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\app\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\capacitor-cordova-android-plugins\src\main\libs', not found
+Caching disabled for task ':app:processDebugMainManifest' because:
+  Build cache is disabled
+Task ':app:processDebugMainManifest' is not up-to-date because:
+  Task has failed previously.
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\app\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\app\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'C:\Users\USER\Desktop\Soft\toans\android\capacitor-cordova-android-plugins\src\main\libs', not found
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:processDebugMainManifest'.
+> com.android.manifmerger.ManifestMerger2$MergeFailureException: Error parsing C:\Users\USER\Desktop\Soft\toans\android\app\src\main\AndroidManifest.xml
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 3s
+10 actionable tasks: 1 executed, 9 up-to-date
+Watched directory hierarchies: [C:\Users\USER\Desktop\Soft\toans\android]

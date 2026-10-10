@@ -13,6 +13,7 @@ import {
 
 export default function FloatingReminderPrompt() {
   const { user, initializing } = useAuth();
+
   const [showPrompt, setShowPrompt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [adminEnabled, setAdminEnabled] = useState(false);
@@ -21,7 +22,9 @@ export default function FloatingReminderPrompt() {
 
   const userId = user?._id;
   const isCustomer = user?.role === "customer";
+
   const checkedUser = useRef<string | null>(null);
+  const checkingRef = useRef(false);
 
   const checkStatus = useCallback(async () => {
     if (
@@ -30,11 +33,27 @@ export default function FloatingReminderPrompt() {
       !isCustomer ||
       !Capacitor.isNativePlatform()
     ) {
+      console.log("[FloatingReminder TEST] Check skipped", {
+        initializing,
+        userId,
+        role: user?.role,
+        platform: Capacitor.getPlatform(),
+      });
+
       setShowPrompt(false);
       return;
     }
 
+    if (checkingRef.current) {
+      console.log("[FloatingReminder TEST] Check already running");
+      return;
+    }
+
+    checkingRef.current = true;
+
     try {
+      console.log("[FloatingReminder TEST] Checking admin setting");
+
       const response = await API.get<{
         success?: boolean;
         data?: { floatingReminderEnabled?: boolean };
@@ -43,31 +62,57 @@ export default function FloatingReminderPrompt() {
       const enabled =
         response.data?.data?.floatingReminderEnabled === true;
 
+      console.log("[FloatingReminder TEST] API result", {
+        httpStatus: response.status,
+        success: response.data?.success,
+        responseData: response.data,
+        adminEnabled: enabled,
+      });
+
       setAdminEnabled(enabled);
 
       if (!enabled) {
         setShowPrompt(false);
         setWaitingForSettings(false);
+        setMessage("");
+        console.log("[FloatingReminder TEST] Admin switch is OFF");
         return;
       }
 
       const status = await getFloatingReminderConsentStatus(userId);
 
+      console.log("[FloatingReminder TEST] Consent status", {
+        userId,
+        asked: status.asked,
+        enabled: status.enabled,
+        overlayGranted: status.overlayGranted,
+      });
+
       if (status.asked) {
         setShowPrompt(false);
         setWaitingForSettings(false);
+        console.log(
+          "[FloatingReminder TEST] Customer already answered",
+        );
         return;
       }
 
       setShowPrompt(true);
+      console.log("[FloatingReminder TEST] Prompt should appear");
     } catch (error) {
       console.error(
-        "[FloatingReminderPrompt] Could not check settings:",
+        "[FloatingReminder TEST] Status check FAILED",
         error,
       );
+
       setShowPrompt(false);
+      setMessage(
+        "We couldn't check reminder settings. Please check your connection and reopen the app.",
+      );
+    } finally {
+      checkingRef.current = false;
     }
-  }, [initializing, userId, isCustomer]);
+  }, [initializing, userId, isCustomer, user?.role]);
 
   useEffect(() => {
     if (initializing) return;
@@ -76,6 +121,8 @@ export default function FloatingReminderPrompt() {
       checkedUser.current = null;
       setShowPrompt(false);
       setWaitingForSettings(false);
+      setAdminEnabled(false);
+      setMessage("");
       return;
     }
 
@@ -90,47 +137,67 @@ export default function FloatingReminderPrompt() {
       return;
     }
 
-    const onResume = () => {
+    const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
 
-      if (waitingForSettings) {
-        void (async () => {
+      console.log("[FloatingReminder TEST] App returned to foreground");
+
+      void (async () => {
+        if (waitingForSettings) {
           try {
             const granted = await checkFloatingOverlayPermission();
+
+            console.log(
+              "[FloatingReminder TEST] Overlay permission after return:",
+              granted,
+            );
 
             setWaitingForSettings(false);
 
             if (granted) {
               await syncLoanWidget();
               setMessage(
-                "Floating reminders are enabled when a payment is due.",
+                "Permission checked. Floating reminders can appear when a payment is due.",
               );
             } else {
               setMessage(
-                "Overlay permission was not granted. You can enable it later in Android Settings.",
+                "Overlay permission is still off. Enable it in Android Settings to use floating reminders.",
               );
             }
           } catch (error) {
             console.error(
-              "[FloatingReminderPrompt] Permission check failed:",
+              "[FloatingReminder TEST] Permission recheck FAILED",
               error,
             );
             setWaitingForSettings(false);
+            setMessage(
+              "We couldn't verify Android permission. Please try again.",
+            );
           }
-        })();
-      } else {
-        void syncLoanWidget().catch((error) => {
-          console.error("[FloatingReminderPrompt] Sync failed:", error);
-        });
-      }
+        }
+
+        await checkStatus();
+
+        try {
+          await syncLoanWidget();
+        } catch (error) {
+          console.error(
+            "[FloatingReminder TEST] Widget sync FAILED",
+            error,
+          );
+        }
+      })();
     };
 
-    document.addEventListener("visibilitychange", onResume);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
-      document.removeEventListener("visibilitychange", onResume);
+      document.removeEventListener(
+        "visibilitychange",
+        onVisibilityChange,
+      );
     };
-  }, [userId, isCustomer, waitingForSettings]);
+  }, [userId, isCustomer, waitingForSettings, checkStatus]);
 
   const handleEnable = async () => {
     if (!userId || busy || !adminEnabled) return;
@@ -138,10 +205,23 @@ export default function FloatingReminderPrompt() {
     setBusy(true);
     setMessage("");
 
+    console.log("[FloatingReminder TEST] Enable clicked", {
+      userId,
+      platform: Capacitor.getPlatform(),
+      adminEnabled,
+    });
+
     try {
       await setFloatingReminderConsent(userId, true);
 
+      console.log("[FloatingReminder TEST] Consent saved as enabled");
+
       const granted = await checkFloatingOverlayPermission();
+
+      console.log(
+        "[FloatingReminder TEST] Current overlay permission:",
+        granted,
+      );
 
       if (granted) {
         await syncLoanWidget();
@@ -149,21 +229,32 @@ export default function FloatingReminderPrompt() {
         setMessage(
           "Floating reminders are enabled when a payment is due.",
         );
-      } else {
-        setWaitingForSettings(true);
-        setMessage(
-          "Allow MenuMoney to display over other apps. Return here afterward to finish setup.",
-        );
+        return;
+      }
+
+      setWaitingForSettings(true);
+      setMessage(
+        "Allow MenuMoney to display over other apps. Return here afterward to finish setup.",
+      );
+
+      try {
         await requestFloatingOverlayPermission();
+        console.log(
+          "[FloatingReminder TEST] Android permission settings requested",
+        );
+      } catch (error) {
+        console.error(
+          "[FloatingReminder TEST] Could not open Android settings",
+          error,
+        );
+        setWaitingForSettings(false);
+        setMessage(
+          "Android settings could not be opened. Go to Settings > Apps > MenuMoney > Display over other apps.",
+        );
       }
     } catch (error) {
-      console.error(
-        "[FloatingReminderPrompt] Enable failed:",
-        error,
-      );
-      setMessage(
-        "We couldn't complete setup. Please try again.",
-      );
+      console.error("[FloatingReminder TEST] Enable FAILED", error);
+      setMessage("We couldn't complete setup. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -173,14 +264,21 @@ export default function FloatingReminderPrompt() {
     if (!userId || busy) return;
 
     setBusy(true);
+    setMessage("");
 
     try {
       await setFloatingReminderConsent(userId, false);
+
+      console.log(
+        "[FloatingReminder TEST] Consent saved as declined",
+        { userId },
+      );
+
       setShowPrompt(false);
-      setMessage("");
+      setWaitingForSettings(false);
     } catch (error) {
       console.error(
-        "[FloatingReminderPrompt] Saving choice failed:",
+        "[FloatingReminder TEST] Saving choice FAILED",
         error,
       );
       setMessage("We couldn't save your choice. Please try again.");

@@ -153,21 +153,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   ======================================================= */
 
   useEffect(() => {
-    console.log("[AUTH TEST] Widget effect started", {
-      initializing,
-      userId: user?._id ?? null,
-      role: user?.role ?? null,
-      hasToken: Boolean(authApi.getToken()),
-      visibility: document.visibilityState,
-    });
-
+    
     const clearWidget = (): void => {
-      console.log("[AUTH TEST] Calling clearLoanWidget", {
-        reason: "No authenticated user in AuthContext",
-        initializing,
-        userId: user?._id ?? null,
-        role: user?.role ?? null,
-      });
+      
 
       void clearLoanWidget().catch((error) => {
         console.error("[AUTH TEST] clearLoanWidget failed:", error);
@@ -175,17 +163,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
 
     const syncWidget = (): void => {
-      console.log("[AUTH TEST] Widget sync check", {
-        userId: user?._id ?? null,
-        role: user?.role ?? null,
-        visibility: document.visibilityState,
-      });
+      
 
       if (document.visibilityState === "visible" && user) {
-        console.log("[AUTH TEST] Calling syncLoanWidget", {
-          userId: user._id,
-          role: user.role,
-        });
+        
 
         void syncLoanWidget().catch((error) => {
           console.error("[AUTH TEST] syncLoanWidget failed:", error);

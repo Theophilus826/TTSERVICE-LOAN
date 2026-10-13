@@ -2,7 +2,8 @@
 import { Outlet } from "react-router-dom";
 import CustomerBottomNav from "../dashboard/ButtomNarve";
 import FloatingReminderPrompt from "./FloatingReminderPrompt";
-import FloatingAppUpdatePrompt from "./FloatingAppUpdatePrompt";
+import KycAppDownloadPrompt from "./KycAppDownloadPrompt";
+
 
 export default function MainLayout() {
   return (
@@ -18,7 +19,7 @@ export default function MainLayout() {
 
       <FloatingReminderPrompt />
 
-      <FloatingAppUpdatePrompt />
+      <KycAppDownloadPrompt/>
     </div>
   );
 }

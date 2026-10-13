@@ -2,8 +2,8 @@
 import { Outlet } from "react-router-dom";
 import CustomerBottomNav from "../dashboard/ButtomNarve";
 import FloatingReminderPrompt from "./FloatingReminderPrompt";
+import FloatingAppUpdatePrompt from "./FloatingAppUpdatePrompt";
 
-/* MAIN CUSTOMER LAYOUT */
 export default function MainLayout() {
   return (
     <div className="min-h-screen bg-gray-100">
@@ -17,8 +17,8 @@ export default function MainLayout() {
       <CustomerBottomNav />
 
       <FloatingReminderPrompt />
+
+      <FloatingAppUpdatePrompt />
     </div>
   );
 }
-
-

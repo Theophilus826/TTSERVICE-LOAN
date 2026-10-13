@@ -33,7 +33,7 @@ import RepaymentMandatePage from "../pages/RepaymentMandatePage";
 import LoanOffers from "../pages/LoanOffers";
 import LoanOfferDetails from "../pages/LoanOfferDetails";
 import RepaymentAccount from "../pages/RepaymentAccount";
-
+import ChatUs from "../component/ChatUs";
 /* =========================================================
 CUSTOMER ACCOUNT / VERIFICATION
 ========================================================= */
@@ -90,7 +90,7 @@ import AdminDisbursement from "../admin/AdminDisbursement";
 import AdminDisbursementDetails from "../admin/AdminDisbursementDetails";
 import AdminLoanApplicationDetails from "../admin/AdminLoanApplicationDetails";
 import AdminRepaymentsPage from "../admin/AdminRepaymentsPage";
-
+import AdminNotifications from "../admin/AdminNotifications";
 
 /* =========================================================
 ROLE CONFIGURATION
@@ -111,6 +111,7 @@ ROUTES
 
 function AppRoutes() {
   return (
+    <>
     <Routes>
       {/* =====================================================
 PUBLIC ROUTES
@@ -190,14 +191,17 @@ PUBLIC ROUTES
           Loan Onboarding
       ================================================= */}
 
-           {/* Other application routes */} 
-          <Route element={<KycFlowGuard />}> 
-          <Route path="/kyc-personal" element={<PersonalStep />} /> 
-          {/* Identity / customer verification */} 
-          <Route path="/kyc" element={<Kyc />} /> 
-          <Route path="/bank-accounts" element={<BankAccountStep />} /> 
-          <Route path="/bvn" element={<BvnStep />} /> 
-          <Route path="/face-verification" element={<FaceVerificationPage/>} /> 
+          {/* Other application routes */}
+          <Route element={<KycFlowGuard />}>
+            <Route path="/kyc-personal" element={<PersonalStep />} />
+            {/* Identity / customer verification */}
+            <Route path="/kyc" element={<Kyc />} />
+            <Route path="/bank-accounts" element={<BankAccountStep />} />
+            <Route path="/bvn" element={<BvnStep />} />
+            <Route
+              path="/face-verification"
+              element={<FaceVerificationPage />}
+            />
           </Route>
 
           {/* =================================================
@@ -378,7 +382,7 @@ PUBLIC ROUTES
         ============================================= */}
 
             <Route path="bank-accounts" element={<AdminBankAccounts />} />
-
+            <Route path="notifications" element={<AdminNotifications />} />
             {/* =============================================
             DISBURSEMENTS
         ============================================= */}
@@ -415,8 +419,13 @@ PUBLIC ROUTES
       GLOBAL UNKNOWN ROUTES
   ===================================================== */}
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+     
+     <Route path="*" element={<Navigate to="/dashboard" replace />} />
+       
     </Routes>
+
+    <ChatUs />
+    </>
   );
 }
 

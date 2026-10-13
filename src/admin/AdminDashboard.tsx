@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowDownRight,
+  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   CreditCard,
@@ -98,13 +99,16 @@ export default function AdminDashboard() {
       API.get<{ data?: AuditLog[]; logs?: AuditLog[] }>("/audit/admin"),
     ]);
 
-    const [usersResult, loansResult, applicationsResult, fraudResult, auditResult] =
-      results;
+    const [
+      usersResult,
+      loansResult,
+      applicationsResult,
+      fraudResult,
+      auditResult,
+    ] = results;
 
     const users =
-      usersResult.status === "fulfilled"
-        ? usersResult.value.data
-        : null;
+      usersResult.status === "fulfilled" ? usersResult.value.data : null;
     const loanStats =
       loansResult.status === "fulfilled" ? loansResult.value : null;
     const applicationStats =
@@ -122,7 +126,7 @@ export default function AdminDashboard() {
 
     setDashboard({
       totalUsers:
-        users === null ? null : users.count ?? users.data?.length ?? 0,
+        users === null ? null : (users.count ?? users.data?.length ?? 0),
       applications: applicationStats?.total ?? null,
       activeLoans: loanStats?.active ?? null,
       riskAlerts:
@@ -142,10 +146,9 @@ export default function AdminDashboard() {
         applicationsResult.status === "fulfilled"
           ? "Connected"
           : "Unavailable",
-      databaseStatus:
-        results.some((result) => result.status === "fulfilled")
-          ? "Connected"
-          : "Unavailable",
+      databaseStatus: results.some((result) => result.status === "fulfilled")
+        ? "Connected"
+        : "Unavailable",
       fraudStatus:
         fraudResult.status === "fulfilled" ? "Connected" : "Unavailable",
     });
@@ -155,9 +158,13 @@ export default function AdminDashboard() {
     ).length;
 
     if (failedCount === results.length) {
-      setError("Dashboard data could not be loaded. Check your connection and try again.");
+      setError(
+        "Dashboard data could not be loaded. Check your connection and try again.",
+      );
     } else if (failedCount > 0) {
-      setError("Some dashboard data is unavailable. Retry to refresh all sections.");
+      setError(
+        "Some dashboard data is unavailable. Retry to refresh all sections.",
+      );
     }
 
     setLoading(false);
@@ -198,9 +205,23 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="mb-4 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700"
+          >
+            <ArrowLeft size={16} />
+            Back
+          </button>
+
           <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+
           <p className="mt-1 text-sm text-gray-500">
-            Welcome back, <span className="font-medium text-gray-700">{user?.name || "Administrator"}</span>.
+            Welcome back,{" "}
+            <span className="font-medium text-gray-700">
+              {user?.name || "Administrator"}
+            </span>
+            .
           </p>
         </div>
 
@@ -238,7 +259,7 @@ export default function AdminDashboard() {
                   <p className="mt-2 text-3xl font-bold text-gray-900">
                     {loading && dashboard === null
                       ? "..."
-                      : stat.value?.toLocaleString("en-NG") ?? "—"}
+                      : (stat.value?.toLocaleString("en-NG") ?? "—")}
                   </p>
                 </div>
                 <span className="rounded-lg bg-orange-50 p-3 text-orange-600">
@@ -254,8 +275,12 @@ export default function AdminDashboard() {
         <section className="rounded-xl border border-gray-200 bg-white p-6 lg:col-span-2">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-semibold text-gray-900">Financial Overview</h2>
-              <p className="text-sm text-gray-500">Recorded loan disbursements and repayments</p>
+              <h2 className="font-semibold text-gray-900">
+                Financial Overview
+              </h2>
+              <p className="text-sm text-gray-500">
+                Recorded loan disbursements and repayments
+              </p>
             </div>
             <Wallet size={23} className="text-orange-500" />
           </div>
@@ -286,9 +311,18 @@ export default function AdminDashboard() {
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="font-semibold text-gray-900">Service Connections</h2>
           <div className="mt-5 space-y-4">
-            <Status label="Admin API" status={dashboard?.apiStatus || "Checking"} />
-            <Status label="Database-backed data" status={dashboard?.databaseStatus || "Checking"} />
-            <Status label="Fraud alerts" status={dashboard?.fraudStatus || "Checking"} />
+            <Status
+              label="Admin API"
+              status={dashboard?.apiStatus || "Checking"}
+            />
+            <Status
+              label="Database-backed data"
+              status={dashboard?.databaseStatus || "Checking"}
+            />
+            <Status
+              label="Fraud alerts"
+              status={dashboard?.fraudStatus || "Checking"}
+            />
             <Status label="Transfer provider" status="Not monitored" />
           </div>
         </section>
@@ -298,7 +332,9 @@ export default function AdminDashboard() {
         <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-gray-900">Recent Activity</h2>
-            <p className="mt-1 text-sm text-gray-500">Latest recorded audit events</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Latest recorded audit events
+            </p>
           </div>
           <button
             type="button"
@@ -310,7 +346,9 @@ export default function AdminDashboard() {
         </div>
 
         {loading && !dashboard ? (
-          <div className="p-8 text-center text-sm text-gray-500">Loading activity...</div>
+          <div className="p-8 text-center text-sm text-gray-500">
+            Loading activity...
+          </div>
         ) : dashboard?.recentActivity.length ? (
           <div className="divide-y divide-gray-100">
             {dashboard.recentActivity.map((entry) => (
@@ -319,13 +357,23 @@ export default function AdminDashboard() {
                   <Activity size={16} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900">{formatActivity(entry)}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {formatActivity(entry)}
+                  </p>
                   <p className="mt-1 truncate text-xs text-gray-500">
-                    {entry.description || entry.resource || "Administrative event"}
-                    {entry.performedBy?.name ? ` · ${entry.performedBy.name}` : entry.user?.name ? ` · ${entry.user.name}` : ""}
+                    {entry.description ||
+                      entry.resource ||
+                      "Administrative event"}
+                    {entry.performedBy?.name
+                      ? ` · ${entry.performedBy.name}`
+                      : entry.user?.name
+                        ? ` · ${entry.user.name}`
+                        : ""}
                   </p>
                 </div>
-                <time className="shrink-0 text-xs text-gray-500">{formatDate(entry.createdAt)}</time>
+                <time className="shrink-0 text-xs text-gray-500">
+                  {formatDate(entry.createdAt)}
+                </time>
               </div>
             ))}
           </div>

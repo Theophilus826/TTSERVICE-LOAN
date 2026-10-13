@@ -11,3 +11,22 @@
   --color-bg: #F3F4F6;
   --color-text: #111827;
 }
+
+@keyframes goldGlow {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 2px #D4AF37;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 0.75;
+    text-shadow: 0 0 8px #D4AF37;
+    transform: translateY(-2px);
+  }
+}
+
+.chat-us-title {
+  color: #D4AF37;
+  animation: goldGlow 1.8s ease-in-out infinite;
+}

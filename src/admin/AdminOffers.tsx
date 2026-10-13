@@ -631,7 +631,9 @@ export default function AdminOffers() {
       });
 
       const offerData = {
-        approvedAmount: offerPreview.approvedAmount,
+        approvedAmount: Number(offerPreview.approvedAmount),
+        creditAssessmentId:
+          creditAssessmentId || application.creditAssessment?._id,
       };
 
       const offerResponse = await API.post(

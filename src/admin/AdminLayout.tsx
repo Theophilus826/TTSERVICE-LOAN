@@ -1,17 +1,6 @@
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type ComponentType,
-} from "react";
-
-import {
-  NavLink,
-  Outlet,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import type { LucideProps } from "lucide-react";
 
@@ -36,12 +25,10 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
-import {
-  hasPermission,
-  type AdminPermission,
-} from "./adminPermissions";
+import { hasPermission, type AdminPermission } from "./adminPermissions";
 
 import type { UserRole } from "../services/AuthService";
+import { useNotifications } from "../context/NotificationContext";
 
 /* =========================================================
    TYPES
@@ -153,11 +140,11 @@ const navigation: readonly NavigationItem[] = [
     permission: "transfers:view",
   },
   {
-  name: "Repayments",
-  path: "/admin/repayments",
-  icon: CreditCard,
-  permission: "transfers:view",
-},
+    name: "Repayments",
+    path: "/admin/repayments",
+    icon: CreditCard,
+    permission: "transfers:view",
+  },
   {
     name: "Settings",
     path: "/admin/settings",
@@ -170,9 +157,7 @@ const navigation: readonly NavigationItem[] = [
    ROLE CHECK
 ========================================================= */
 
-function isAdminRole(
-  role: UserRole | undefined,
-): boolean {
+function isAdminRole(role: UserRole | undefined): boolean {
   if (!role) {
     return false;
   }
@@ -184,9 +169,7 @@ function isAdminRole(
    ROLE LABEL
 ========================================================= */
 
-function getRoleLabel(
-  role: UserRole | undefined,
-): string {
+function getRoleLabel(role: UserRole | undefined): string {
   switch (role) {
     case "super_admin":
       return "Super Admin";
@@ -259,27 +242,20 @@ function getPageTitle(pathname: string): string {
    INITIALS
 ========================================================= */
 
-function getInitials(
-  name?: string,
-  email?: string,
-): string {
+function getInitials(name?: string, email?: string): string {
   const value = name?.trim() || email?.trim();
 
   if (!value) {
     return "AD";
   }
 
-  const parts = value
-    .split(/\s+/)
-    .filter(Boolean);
+  const parts = value.split(/\s+/).filter(Boolean);
 
   if (parts.length >= 2) {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   }
 
-  return value
-    .slice(0, 2)
-    .toUpperCase();
+  return value.slice(0, 2).toUpperCase();
 }
 
 /* =========================================================
@@ -295,9 +271,7 @@ function AdminLoading() {
           aria-hidden="true"
         />
 
-        <p className="mt-4 text-sm text-gray-500">
-          Loading admin panel...
-        </p>
+        <p className="mt-4 text-sm text-gray-500">Loading admin panel...</p>
       </div>
     </div>
   );
@@ -312,41 +286,37 @@ const AdminLayout = () => {
   const location = useLocation();
 
   const { user, logout } = useAuth();
+  const { unreadCount, refreshNotifications } = useNotifications();
 
-  const [sidebarOpen, setSidebarOpen] =
-    useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const [profileOpen, setProfileOpen] =
-    useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   /*
    * Change this if your AuthContext exposes a different
    * loading property.
    */
   const authLoading =
-    (user as typeof user & {
-      isLoading?: boolean;
-    } | null)?.isLoading ?? false;
+    (
+      user as
+        | (typeof user & {
+            isLoading?: boolean;
+          })
+        | null
+    )?.isLoading ?? false;
 
-  const role = user?.role as
-    | UserRole
-    | undefined;
+  const role = user?.role as UserRole | undefined;
 
   const pageTitle = useMemo(
     () => getPageTitle(location.pathname),
     [location.pathname],
   );
 
-  const adminName =
-    user?.name?.trim() ||
-    user?.email ||
-    "Administrator";
+  const adminName = user?.name?.trim() || user?.email || "Administrator";
 
   const roleLabel = getRoleLabel(role);
 
-  const initials = getInitials(
-    user?.name,
-      );
+  const initials = getInitials(user?.name);
 
   /*
    * Only show users that:
@@ -358,9 +328,7 @@ const AdminLayout = () => {
       return [];
     }
 
-    return navigation.filter((item) =>
-      hasPermission(role, item.permission),
-    );
+    return navigation.filter((item) => hasPermission(role, item.permission));
   }, [role]);
 
   /* =======================================================
@@ -377,25 +345,17 @@ const AdminLayout = () => {
   ====================================================== */
 
   useEffect(() => {
-    const handleEscape = (
-      event: KeyboardEvent,
-    ) => {
+    const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSidebarOpen(false);
         setProfileOpen(false);
       }
     };
 
-    document.addEventListener(
-      "keydown",
-      handleEscape,
-    );
+    document.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.removeEventListener(
-        "keydown",
-        handleEscape,
-      );
+      document.removeEventListener("keydown", handleEscape);
     };
   }, []);
 
@@ -452,9 +412,7 @@ const AdminLayout = () => {
           type="button"
           aria-label="Close navigation"
           className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm lg:hidden"
-          onClick={() =>
-            setSidebarOpen(false)
-          }
+          onClick={() => setSidebarOpen(false)}
         />
       )}
 
@@ -468,9 +426,7 @@ const AdminLayout = () => {
           "border-r border-slate-200 bg-white",
           "transition-transform duration-300 ease-in-out",
           "lg:translate-x-0",
-          sidebarOpen
-            ? "translate-x-0"
-            : "-translate-x-full",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
         ].join(" ")}
       >
         {/* Brand */}
@@ -478,17 +434,12 @@ const AdminLayout = () => {
         <div className="flex h-[76px] items-center justify-between border-b border-slate-200 px-5">
           <button
             type="button"
-            onClick={() =>
-              navigate("/admin")
-            }
+            onClick={() => navigate("/admin")}
             className="flex items-center gap-3"
             aria-label="Go to admin dashboard"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm">
-              <Landmark
-                size={20}
-                strokeWidth={2}
-              />
+              <Landmark size={20} strokeWidth={2} />
             </div>
 
             <div className="text-left">
@@ -505,9 +456,7 @@ const AdminLayout = () => {
           <button
             type="button"
             aria-label="Close sidebar"
-            onClick={() =>
-              setSidebarOpen(false)
-            }
+            onClick={() => setSidebarOpen(false)}
             className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 lg:hidden"
           >
             <X size={19} />
@@ -521,56 +470,41 @@ const AdminLayout = () => {
           aria-label="Admin navigation"
         >
           <div className="space-y-1">
-            {visibleNavigation.map(
-              (item) => {
-                const Icon = item.icon;
+            {visibleNavigation.map((item) => {
+              const Icon = item.icon;
 
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.end}
-                    className={({
-                      isActive,
-                    }) =>
-                      [
-                        "group flex items-center gap-3 rounded-xl px-3 py-2.5",
-                        "text-sm font-medium transition-all duration-150",
-                        isActive
-                          ? "bg-slate-950 text-white shadow-sm"
-                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-                      ].join(" ")
-                    }
-                  >
-                    {({
-                      isActive,
-                    }) => (
-                      <>
-                        <Icon
-                          size={18}
-                          strokeWidth={
-                            isActive
-                              ? 2.2
-                              : 1.9
-                          }
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    [
+                      "group flex items-center gap-3 rounded-xl px-3 py-2.5",
+                      "text-sm font-medium transition-all duration-150",
+                      isActive
+                        ? "bg-slate-950 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                    ].join(" ")
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon size={18} strokeWidth={isActive ? 2.2 : 1.9} />
+
+                      <span className="flex-1">{item.name}</span>
+
+                      {isActive && (
+                        <span
+                          className="h-1.5 w-1.5 rounded-full bg-white"
+                          aria-hidden="true"
                         />
-
-                        <span className="flex-1">
-                          {item.name}
-                        </span>
-
-                        {isActive && (
-                          <span
-                            className="h-1.5 w-1.5 rounded-full bg-white"
-                            aria-hidden="true"
-                          />
-                        )}
-                      </>
-                    )}
-                  </NavLink>
-                );
-              },
-            )}
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
           </div>
         </nav>
 
@@ -589,8 +523,7 @@ const AdminLayout = () => {
                 </p>
 
                 <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
-                  Admin activity is monitored
-                  and recorded.
+                  Admin activity is monitored and recorded.
                 </p>
               </div>
             </div>
@@ -616,9 +549,7 @@ const AdminLayout = () => {
                 type="button"
                 aria-label="Open navigation"
                 aria-expanded={sidebarOpen}
-                onClick={() =>
-                  setSidebarOpen(true)
-                }
+                onClick={() => setSidebarOpen(true)}
                 className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 lg:hidden"
               >
                 <Menu size={21} />
@@ -626,18 +557,13 @@ const AdminLayout = () => {
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <Home
-                    size={14}
-                    className="hidden text-slate-400 sm:block"
-                  />
+                  <Home size={14} className="hidden text-slate-400 sm:block" />
 
                   <span className="hidden text-xs font-medium text-slate-400 sm:block">
                     Administration
                   </span>
 
-                  <span className="hidden text-slate-300 sm:block">
-                    /
-                  </span>
+                  <span className="hidden text-slate-300 sm:block">/</span>
 
                   <h1 className="truncate text-lg font-bold tracking-tight text-slate-950 sm:text-xl">
                     {pageTitle}
@@ -653,20 +579,27 @@ const AdminLayout = () => {
 
               <button
                 type="button"
-                aria-label="Notifications"
-                onClick={() =>
-                  navigate(
-                    "/admin/notifications",
-                  )
+                aria-label={
+                  unreadCount > 0
+                    ? `Notifications, ${unreadCount} unread`
+                    : "Notifications"
                 }
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                onClick={() => {
+                  void refreshNotifications();
+                  navigate("/admin/notifications");
+                }}
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
               >
                 <Bell size={19} />
 
-                <span
-                  className="absolute right-2.5 top-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"
-                  aria-hidden="true"
-                />
+                {unreadCount > 0 && (
+                  <span
+                    className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white"
+                    aria-hidden="true"
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </button>
 
               <div className="hidden h-8 w-px bg-slate-200 sm:block" />
@@ -678,12 +611,7 @@ const AdminLayout = () => {
                   type="button"
                   aria-haspopup="menu"
                   aria-expanded={profileOpen}
-                  onClick={() =>
-                    setProfileOpen(
-                      (current) =>
-                        !current,
-                    )
-                  }
+                  onClick={() => setProfileOpen((current) => !current)}
                   className="flex items-center gap-2.5 rounded-xl p-1.5 pr-2 transition hover:bg-slate-100"
                 >
                   <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 text-xs font-bold text-white">
@@ -704,9 +632,7 @@ const AdminLayout = () => {
                     size={15}
                     className={[
                       "hidden text-slate-400 transition-transform md:block",
-                      profileOpen
-                        ? "rotate-180"
-                        : "",
+                      profileOpen ? "rotate-180" : "",
                     ].join(" ")}
                   />
                 </button>
@@ -719,11 +645,7 @@ const AdminLayout = () => {
                       type="button"
                       aria-label="Close profile menu"
                       className="fixed inset-0 z-40 cursor-default"
-                      onClick={() =>
-                        setProfileOpen(
-                          false,
-                        )
-                      }
+                      onClick={() => setProfileOpen(false)}
                     />
 
                     {/* Dropdown */}
@@ -744,8 +666,7 @@ const AdminLayout = () => {
                             </p>
 
                             <p className="truncate text-xs text-slate-400">
-                              {user.email ||
-                                "Administrator"}
+                              {user.email || "Administrator"}
                             </p>
 
                             <p className="mt-0.5 text-[11px] font-medium text-slate-400">
@@ -760,35 +681,23 @@ const AdminLayout = () => {
                           type="button"
                           role="menuitem"
                           onClick={() => {
-                            setProfileOpen(
-                              false,
-                            );
+                            setProfileOpen(false);
 
-                            navigate(
-                              "/admin/settings",
-                            );
+                            navigate("/admin/settings");
                           }}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
                         >
-                          <Settings
-                            size={17}
-                          />
-
+                          <Settings size={17} />
                           Settings
                         </button>
 
                         <button
                           type="button"
                           role="menuitem"
-                          onClick={
-                            handleLogout
-                          }
+                          onClick={handleLogout}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50"
                         >
-                          <LogOut
-                            size={17}
-                          />
-
+                          <LogOut size={17} />
                           Sign out
                         </button>
                       </div>
@@ -815,4 +724,3 @@ const AdminLayout = () => {
 };
 
 export default AdminLayout;
-

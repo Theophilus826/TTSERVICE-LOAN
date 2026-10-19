@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Network access for API requests and app heartbeats -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Floating loan reminder permissions -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -15,6 +18,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- Floating loan payment reminder service -->
         <service
             android:name=".FloatingReminderService"
             android:exported="false"
@@ -26,6 +30,7 @@
                 android:value="User-enabled floating loan payment reminders when an unpaid installment is due" />
         </service>
 
+        <!-- Main Capacitor activity -->
         <activity
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
@@ -41,22 +46,27 @@
 
         </activity>
 
+        <!-- File sharing provider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
+
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Loan home-screen widget -->
         <receiver
             android:name=".LoanWidget"
             android:exported="false">
+
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
+
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/loan_widget_info" />

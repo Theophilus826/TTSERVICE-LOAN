@@ -146,6 +146,12 @@ const navigation: readonly NavigationItem[] = [
     permission: "transfers:view",
   },
   {
+    name: "App",
+    path: "/admin/app-activity",
+    icon: LayoutDashboard,
+    permission: "settings:view",
+  },
+  {
     name: "Settings",
     path: "/admin/settings",
     icon: Settings,
@@ -219,6 +225,7 @@ function getPageTitle(pathname: string): string {
     "/admin/repayments": "Repayments",
     "/admin/settings": "Settings",
     "/admin/notifications": "Notifications",
+    "/admin/app-activity": "App ",
   };
 
   if (pageTitles[pathname]) {

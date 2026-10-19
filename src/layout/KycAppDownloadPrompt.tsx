@@ -1,25 +1,41 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import {
   Download,
   Smartphone,
   LoaderCircle,
   X,
+  RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 
 import API from "../services/Api";
 
-type AppUpdate = {
+type AppUpdateResponse = {
+  success: boolean;
+  updateAvailable?: boolean;
   version?: string;
-  apkUrl: string;
+  versionCode?: number;
+  apkUrl?: string | null;
   changelog?: string;
+  message?: string;
+};
+
+type AppUpdate = {
+  version: string;
+  versionCode: number;
+  apkUrl: string;
+  changelog: string;
 };
 
 type Props = {
   open: boolean;
   onClose: () => void;
 };
+
+const TRUSTED_APK_URL =
+  "https://github.com/Theophilus826/Tofads-loan/releases/download/TTSERVICE/app-debug.apk";
 
 function isTrustedApkUrl(value: string): boolean {
   try {
@@ -28,10 +44,12 @@ function isTrustedApkUrl(value: string): boolean {
     return (
       url.protocol === "https:" &&
       url.hostname === "github.com" &&
-      url.pathname.startsWith(
-        "/Theophilus826/App-release/releases/download/"
-      ) &&
-      url.pathname.endsWith("/TTSERVICE.apk")
+      url.pathname ===
+        "/Theophilus826/Tofads-loan/releases/download/TTSERVICE/app-debug.apk" &&
+      !url.search &&
+      !url.hash &&
+      !url.username &&
+      !url.password
     );
   } catch {
     return false;
@@ -46,97 +64,114 @@ export default function KycAppDownloadPrompt({
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
-  useEffect(() => {
-    if (!open || Capacitor.isNativePlatform()) return;
-
-    let cancelled = false;
-
-    async function loadApk() {
-      setLoading(true);
-      setError("");
-
-      try {
-        // Fetch the latest app release using the shared API instance.
-        const response = await API.get(
-          "/api/app-version/latest",
-          {
-            params: {
-              currentVersionCode: 0,
-            },
-          }
-        );
-
-        const data = response.data;
-
-        if (!data.success || !data.apkUrl) {
-          throw new Error(
-            "The app download is temporarily unavailable. Please try again later."
-          );
-        }
-
-        if (!isTrustedApkUrl(data.apkUrl)) {
-          throw new Error("The APK download URL is invalid.");
-        }
-
-        if (!cancelled) {
-          setUpdate({
-            version: data.version,
-            apkUrl: data.apkUrl,
-            changelog: data.changelog,
-          });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not load the app download link."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadApk();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
-
-  async function handleDownload() {
-    if (!update?.apkUrl || downloading) return;
-
-    setDownloading(true);
+  const loadApk = useCallback(async (signal: AbortSignal) => {
+    setLoading(true);
     setError("");
+    setUpdate(null);
 
     try {
-      if (!isTrustedApkUrl(update.apkUrl)) {
-        throw new Error("The APK download URL is invalid.");
+      const response = await API.get<AppUpdateResponse>(
+        "/app-version/latest",
+        {
+          params: {
+            currentVersionCode: 0,
+          },
+          signal,
+        }
+      );
+
+      const data = response.data;
+
+      if (!data.success) {
+        throw new Error(
+          data.message || "Unable to load the Android app."
+        );
       }
 
-      const link = document.createElement("a");
-      link.href = update.apkUrl;
-      link.download = "TTSERVICE.apk";
-      link.rel = "noopener noreferrer";
+      if (!data.apkUrl) {
+        throw new Error(
+          "No APK download is currently available. Please try again later."
+        );
+      }
 
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      if (!isTrustedApkUrl(data.apkUrl)) {
+        throw new Error(
+          "The APK download URL is invalid or not trusted."
+        );
+      }
+
+      setUpdate({
+        version: data.version || "Latest",
+        versionCode: data.versionCode ?? 0,
+        apkUrl: data.apkUrl,
+        changelog: data.changelog || "",
+      });
     } catch (err) {
+      if (signal.aborted) return;
+
+      const message =
+        (
+          err as {
+            response?: {
+              data?: {
+                message?: string;
+              };
+            };
+            message?: string;
+          }
+        )?.response?.data?.message ||
+        (err instanceof Error ? err.message : "");
+
       setError(
-        err instanceof Error
-          ? err.message
-          : "Download failed."
+        message || "Could not load the app download link."
       );
     } finally {
-      setDownloading(false);
+      if (!signal.aborted) {
+        setLoading(false);
+      }
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!open || Capacitor.isNativePlatform()) {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void loadApk(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [open, retryKey, loadApk]);
+
+  const handleDownload = () => {
+    if (!update?.apkUrl || downloading) return;
+
+    setError("");
+
+    if (!isTrustedApkUrl(update.apkUrl)) {
+      setError("The APK download URL is invalid.");
+      return;
+    }
+
+    try {
+      setDownloading(true);
+
+      // Open the GitHub release asset directly.
+      // GitHub handles the actual APK download.
+      window.location.assign(update.apkUrl);
+    } catch {
+      setDownloading(false);
+      setError(
+        "Could not open the APK download. Please try again."
+      );
+    }
+  };
 
   if (!open || Capacitor.isNativePlatform()) {
     return null;
@@ -171,30 +206,73 @@ export default function KycAppDownloadPrompt({
         </h2>
 
         <p className="mt-3 text-center text-sm leading-6 text-slate-600">
-          KYC verification must be completed in the TTSERVICE
-          mobile app. Install the Android app, open it, and sign
-          in to continue your verification.
+          Complete your KYC verification securely using the
+          TTSERVICE Android app. Download and install the app,
+          then open it and sign in to continue.
         </p>
 
-        {update?.version && (
-          <p className="mt-2 text-center text-xs text-slate-500">
-            Latest version: {update.version}
-          </p>
+        {loading && (
+          <div
+            className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-600"
+            role="status"
+          >
+            <LoaderCircle
+              size={18}
+              className="animate-spin"
+            />
+            Checking the latest app version...
+          </div>
         )}
 
-        {update?.changelog && (
-          <p className="mt-3 whitespace-pre-line text-sm text-slate-600">
-            {update.changelog}
-          </p>
+        {!loading && update && (
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Latest version
+                </p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {update.version}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
+                <ShieldCheck size={14} />
+                Verified URL
+              </div>
+            </div>
+
+            {update.changelog && (
+              <div className="mt-3 border-t border-slate-200 pt-3">
+                <p className="text-xs font-semibold text-slate-700">
+                  What&apos;s new
+                </p>
+                <p className="mt-1 whitespace-pre-line text-sm leading-5 text-slate-600">
+                  {update.changelog}
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
         {error && (
-          <p
-            className="mt-4 text-sm text-red-600"
+          <div
+            className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700"
             role="alert"
           >
             {error}
-          </p>
+          </div>
+        )}
+
+        {error && !loading && (
+          <button
+            type="button"
+            onClick={() => setRetryKey((key) => key + 1)}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            <RefreshCw size={16} />
+            Retry loading app
+          </button>
         )}
 
         <button
@@ -213,31 +291,18 @@ export default function KycAppDownloadPrompt({
           )}
 
           {loading
-            ? "Loading download..."
+            ? "Checking app..."
             : downloading
-              ? "Preparing download..."
+              ? "Opening download..."
               : "Download Android app"}
         </button>
 
-        {error && (
-          <button
-            type="button"
-            onClick={() => {
-              setUpdate(null);
-              setError("");
-              onClose();
-            }}
-            className="mt-3 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            Close
-          </button>
-        )}
-
-        <p className="mt-4 text-center text-xs text-slate-500">
-          After installing, reopen TTSERVICE to continue KYC.
+        <p className="mt-4 text-center text-xs leading-5 text-slate-500">
+          After downloading, install TTSERVICE and reopen it
+          to continue your KYC verification. Android may ask
+          you to approve installation from your browser.
         </p>
       </div>
     </div>
   );
 }
-

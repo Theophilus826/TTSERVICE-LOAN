@@ -1,4 +1,9 @@
+
 import API from "./Api";
+
+// =========================================================
+// TYPES
+// =========================================================
 
 export type AdminRepaymentStatus =
   | "pending"
@@ -21,6 +26,10 @@ export type AdminRepaymentPaymentMethod =
   | "cash"
   | "other";
 
+// =========================================================
+// USER
+// =========================================================
+
 export interface AdminRepaymentUser {
   _id: string;
   firstName?: string;
@@ -29,6 +38,10 @@ export interface AdminRepaymentUser {
   email?: string;
   phone?: string;
 }
+
+// =========================================================
+// LOAN
+// =========================================================
 
 export interface AdminRepaymentLoan {
   _id: string;
@@ -41,6 +54,10 @@ export interface AdminRepaymentLoan {
   repaymentFrequency?: string;
 }
 
+// =========================================================
+// REPAYMENT SCHEDULE
+// =========================================================
+
 export interface AdminRepaymentSchedule {
   _id: string;
   principalAmount?: number;
@@ -51,6 +68,10 @@ export interface AdminRepaymentSchedule {
   startDate?: string;
   finalDueDate?: string;
 }
+
+// =========================================================
+// REPAYMENT
+// =========================================================
 
 export interface AdminRepayment {
   _id: string;
@@ -91,28 +112,28 @@ export interface AdminRepayment {
 
   amount: number;
   currency: string;
-
   paymentReference: string;
 
   repaymentSource?: AdminRepaymentSource;
-
   paymentMethod?: AdminRepaymentPaymentMethod;
 
   provider?: string;
   providerReference?: string;
 
   status: AdminRepaymentStatus;
-
   failureReason?: string;
 
   allocatedAmount?: number;
   unallocatedAmount?: number;
 
   paidAt?: string;
-
   createdAt?: string;
   updatedAt?: string;
 }
+
+// =========================================================
+// PAGINATION
+// =========================================================
 
 export interface AdminRepaymentsPagination {
   items: AdminRepayment[];
@@ -121,6 +142,10 @@ export interface AdminRepaymentsPagination {
   limit: number;
   totalPages: number;
 }
+
+// =========================================================
+// QUERY PARAMETERS
+// =========================================================
 
 export interface GetAdminRepaymentsParams {
   status?: AdminRepaymentStatus | "";
@@ -131,25 +156,23 @@ export interface GetAdminRepaymentsParams {
   limit?: number;
 }
 
+// =========================================================
+// MANDATE COLLECTION RESPONSE
+// =========================================================
+
 export interface CollectMandateRepaymentResponse {
   repaymentId: string;
-
   loanId: string;
-
   paymentReference: string;
 
   providerReference?: string;
 
   amount: number;
-
   currency: string;
-
   status: AdminRepaymentStatus;
 
   provider: string;
-
   providerStatus?: string | null;
-
   providerTransactionId?: string | null;
 
   providerResponse?: {
@@ -166,37 +189,59 @@ export interface CollectMandateRepaymentResponse {
   failureReason?: string | null;
 }
 
-/**
- * Response returned when an admin reconciles an existing
- * Paystack DVA payment against a loan.
- */
+// =========================================================
+// RECONCILIATION RESPONSE
+// =========================================================
+
 export interface ReconcilePaymentResponse {
   loanId: string;
-
   repaymentId?: string;
 
   provider: string;
-
   providerReference: string;
 
   amount: number;
-
   currency: string;
 
   repaymentScheduleId?: string;
-
   repaymentApplied?: boolean;
-
   alreadyProcessed?: boolean;
 
   accountId?: string;
-
   fundingTransactionId?: string;
 
   message?: string;
 }
 
+// =========================================================
+// AUTO-DEBIT PREVIEW RESPONSE
+// =========================================================
+
+export interface AutoDebitPreviewResponse {
+  dueInstallments: number;
+  totalAmount: number;
+  currency?: string;
+}
+
+// =========================================================
+// AUTO-DEBIT RUN RESPONSE
+// =========================================================
+
+export interface AutoDebitRunResponse {
+  attempted: number;
+  successful: number;
+  failed: number;
+  skipped: number;
+}
+
+// =========================================================
+// ADMIN REPAYMENT API
+// =========================================================
+
 const adminRepaymentApi = {
+  /**
+   * Get paginated repayments with optional filters.
+   */
   async getRepayments(
     params: GetAdminRepaymentsParams = {}
   ): Promise<AdminRepaymentsPagination> {
@@ -207,6 +252,9 @@ const adminRepaymentApi = {
     return response.data.data;
   },
 
+  /**
+   * Collect a repayment using an authorized mandate.
+   */
   async collectMandateRepayment(
     loanId: string,
     amount: number
@@ -224,8 +272,7 @@ const adminRepaymentApi = {
   },
 
   /**
-   * Reconcile a Paystack DVA payment that was credited to the
-   * repayment account but was not applied to the loan.
+   * Reconcile a Paystack DVA payment against a loan.
    */
   async reconcilePayment(
     loanId: string,
@@ -238,6 +285,31 @@ const adminRepaymentApi = {
       {
         providerReference,
       }
+    );
+
+    return response.data.data;
+  },
+
+  /**
+   * Preview installments eligible for auto-debit.
+   * This endpoint must not initiate any payments.
+   */
+  async previewAutoDebit(): Promise<AutoDebitPreviewResponse> {
+    const response = await API.get(
+      "/admin/repayments/auto-debit/preview"
+    );
+
+    return response.data.data;
+  },
+
+  /**
+   * Request backend processing of eligible auto-debit
+   * collections. The backend must validate mandates,
+   * prevent duplicate charges, and verify provider outcomes.
+   */
+  async runAutoDebit(): Promise<AutoDebitRunResponse> {
+    const response = await API.post(
+      "/admin/repayments/auto-debit/run"
     );
 
     return response.data.data;

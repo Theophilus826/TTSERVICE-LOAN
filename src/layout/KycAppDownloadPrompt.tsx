@@ -15,6 +15,7 @@ import API from "../services/Api";
 type AppUpdateResponse = {
   success: boolean;
   updateAvailable?: boolean;
+  forceUpdate?: boolean;
   version?: string;
   versionCode?: number;
   apkUrl?: string | null;
@@ -76,6 +77,8 @@ export default function KycAppDownloadPrompt({
         "/app-version/latest",
         {
           params: {
+            // This is a web download prompt, not an installed app.
+            // Zero requests the latest active APK.
             currentVersionCode: 0,
           },
           signal,
@@ -90,13 +93,20 @@ export default function KycAppDownloadPrompt({
         );
       }
 
-      if (!data.apkUrl) {
+      if (data.updateAvailable !== true) {
         throw new Error(
-          "No APK download is currently available. Please try again later."
+          "No newer APK is currently available. Please try again later."
         );
       }
 
-      if (!isTrustedApkUrl(data.apkUrl)) {
+      if (
+        !Number.isSafeInteger(data.versionCode) ||
+        (data.versionCode ?? 0) < 1
+      ) {
+        throw new Error("The server returned an invalid app version.");
+      }
+
+      if (!data.apkUrl || !isTrustedApkUrl(data.apkUrl)) {
         throw new Error(
           "The APK download URL is invalid or not trusted."
         );
@@ -104,28 +114,26 @@ export default function KycAppDownloadPrompt({
 
       setUpdate({
         version: data.version || "Latest",
-        versionCode: data.versionCode ?? 0,
+        versionCode: data.versionCode!,
         apkUrl: data.apkUrl,
         changelog: data.changelog || "",
       });
     } catch (err) {
       if (signal.aborted) return;
 
-      const message =
-        (
-          err as {
-            response?: {
-              data?: {
-                message?: string;
-              };
-            };
+      const apiError = err as {
+        response?: {
+          data?: {
             message?: string;
-          }
-        )?.response?.data?.message ||
-        (err instanceof Error ? err.message : "");
+          };
+        };
+        message?: string;
+      };
 
       setError(
-        message || "Could not load the app download link."
+        apiError.response?.data?.message ||
+          apiError.message ||
+          "Could not load the app download link."
       );
     } finally {
       if (!signal.aborted) {
@@ -152,25 +160,16 @@ export default function KycAppDownloadPrompt({
   const handleDownload = () => {
     if (!update?.apkUrl || downloading) return;
 
-    setError("");
-
     if (!isTrustedApkUrl(update.apkUrl)) {
       setError("The APK download URL is invalid.");
       return;
     }
 
-    try {
-      setDownloading(true);
+    setError("");
+    setDownloading(true);
 
-      // Open the GitHub release asset directly.
-      // GitHub handles the actual APK download.
-      window.location.assign(update.apkUrl);
-    } catch {
-      setDownloading(false);
-      setError(
-        "Could not open the APK download. Please try again."
-      );
-    }
+    // Navigate directly to the verified GitHub release asset.
+    window.location.assign(update.apkUrl);
   };
 
   if (!open || Capacitor.isNativePlatform()) {
@@ -216,10 +215,7 @@ export default function KycAppDownloadPrompt({
             className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-600"
             role="status"
           >
-            <LoaderCircle
-              size={18}
-              className="animate-spin"
-            />
+            <LoaderCircle size={18} className="animate-spin" />
             Checking the latest app version...
           </div>
         )}
@@ -233,6 +229,9 @@ export default function KycAppDownloadPrompt({
                 </p>
                 <p className="mt-1 font-semibold text-slate-900">
                   {update.version}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Build {update.versionCode}
                 </p>
               </div>
 
@@ -282,10 +281,7 @@ export default function KycAppDownloadPrompt({
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading || downloading ? (
-            <LoaderCircle
-              size={19}
-              className="animate-spin"
-            />
+            <LoaderCircle size={19} className="animate-spin" />
           ) : (
             <Download size={19} />
           )}

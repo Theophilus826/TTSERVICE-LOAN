@@ -44,11 +44,12 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
 
-    // Pin AndroidX Core to a version compatible with compile SDK 36.
+    // AndroidX Core
     implementation "androidx.core:core:1.17.0"
     implementation "androidx.core:core-ktx:1.17.0"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
 
+    // Capacitor
     implementation project(':capacitor-android')
     implementation project(':capacitor-cordova-android-plugins')
 
@@ -58,14 +59,16 @@ dependencies {
     // Encrypted heartbeat preferences
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
 
+    // Unit and instrumentation tests
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
 }
 
+// Capacitor-generated Android configuration
 apply from: 'capacitor.build.gradle'
 
-// Force transitive AndroidX Core dependencies to use compatible versions.
+// Keep AndroidX Core dependencies consistent
 configurations.configureEach {
     resolutionStrategy {
         force 'androidx.core:core:1.17.0'
@@ -73,11 +76,16 @@ configurations.configureEach {
     }
 }
 
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.exists() && servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch (Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+// Firebase Google Services configuration for FCM push notifications.
+// The Google Services plugin must be declared in the root Gradle setup.
+def servicesJSON = file('google-services.json')
+
+if (servicesJSON.exists() && servicesJSON.length() > 0) {
+    apply plugin: 'com.google.gms.google-services'
+    logger.lifecycle("Firebase configuration file found.")
+} else {
+    logger.warn(
+            "Firebase google-services.json is missing or empty. " +
+                    "Firebase push notifications are not configured."
+    )
 }

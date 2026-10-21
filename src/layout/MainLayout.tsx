@@ -1,11 +1,16 @@
 
+import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
+
 import CustomerBottomNav from "../dashboard/ButtomNarve";
 import FloatingReminderPrompt from "./FloatingReminderPrompt";
-import KycAppDownloadPrompt from "./KycAppDownloadPrompt";
-
+import { initializeNativePushNotifications } from "../services/NativePushNotifications";
 
 export default function MainLayout() {
+  useEffect(() => {
+    void initializeNativePushNotifications();
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-100">
       <main
@@ -19,7 +24,7 @@ export default function MainLayout() {
 
       <FloatingReminderPrompt />
 
-      <KycAppDownloadPrompt/>
+      
     </div>
   );
 }

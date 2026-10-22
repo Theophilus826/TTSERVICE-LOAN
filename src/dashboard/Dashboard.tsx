@@ -7,8 +7,16 @@ import {
   WalletCards,
   AlertCircle,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import onboardingApi, { type OnboardingStatus } from "../services/onboarding";
@@ -45,20 +53,25 @@ interface ProfileOffer {
   };
 }
 
+interface DashboardProfilePayload {
+  profile?: DashboardProfile;
+  loanSummary?: {
+    totalApplications?: number;
+    totalOffers?: number;
+    pendingOffers?: number;
+    applicationStatus?: string;
+    offerStatus?: string;
+    activeApplication?: ProfileApplication | null;
+  };
+  offers?: ProfileOffer[];
+}
+
 interface DashboardProfileResponse {
   success?: boolean;
-  data?: {
-    profile?: DashboardProfile;
-    loanSummary?: {
-      totalApplications?: number;
-      totalOffers?: number;
-      pendingOffers?: number;
-      applicationStatus?: string;
-      offerStatus?: string;
-      activeApplication?: ProfileApplication | null;
-    };
-    offers?: ProfileOffer[];
-  };
+  data?: DashboardProfilePayload;
+  profile?: DashboardProfile;
+  loanSummary?: DashboardProfilePayload["loanSummary"];
+  offers?: ProfileOffer[];
 }
 
 // =========================================================
@@ -66,74 +79,86 @@ interface DashboardProfileResponse {
 // =========================================================
 
 function normalizeStatus(value?: string | null): string {
-  return (
-    value
-      ?.trim()
-      .toLowerCase()
-      .replace(/[\s-]+/g, "_") ?? ""
-  );
-}
-
-function isCompletedLoan(loan?: CustomerLoan | null): boolean {
-  if (!loan) {
-    return false;
-  }
-
-  return ["completed", "fully_repaid", "repaid", "closed", "settled"].includes(
-    normalizeStatus(loan.status),
-  );
-}
-
-function isKycStatusComplete(value?: string | null): boolean {
-  return ["completed", "complete", "approved", "verified"].includes(
-    normalizeStatus(value),
-  );
-}
-
-function isKycStatusSubmitted(value?: string | null): boolean {
-  return [
-    "submitted",
-    "pending",
-    "under_review",
-    "in_review",
-    "processing",
-  ].includes(normalizeStatus(value));
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
 }
 
 function formatStatus(value?: string | null): string {
-  if (!value) {
-    return "";
-  }
+  if (!value) return "";
 
   return value
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatCurrency(amount: number, currency?: string): string {
+function isOneOf(
+  value: string | null | undefined,
+  statuses: string[],
+): boolean {
+  return statuses.includes(normalizeStatus(value));
+}
+
+function isCompletedLoan(loan?: CustomerLoan | null): boolean {
+  return isOneOf(loan?.status, [
+    "completed",
+    "fully_repaid",
+    "repaid",
+    "closed",
+    "settled",
+  ]);
+}
+
+function isKycStatusComplete(value?: string | null): boolean {
+  return isOneOf(value, ["completed", "complete", "approved", "verified"]);
+}
+
+function isKycStatusSubmitted(value?: string | null): boolean {
+  return isOneOf(value, [
+    "submitted",
+    "pending",
+    "under_review",
+    "in_review",
+    "processing",
+  ]);
+}
+
+function isTerminalApplication(value?: string | null): boolean {
+  return isOneOf(value, [
+    "completed",
+    "cancelled",
+    "canceled",
+    "rejected",
+    "declined",
+    "withdrawn",
+  ]);
+}
+
+function formatCurrency(
+  amount: number | null | undefined,
+  currency?: string,
+): string {
   const code = currency || "NGN";
+  const value = Number(amount ?? 0);
 
   try {
     return new Intl.NumberFormat("en-NG", {
       style: "currency",
       currency: code,
       maximumFractionDigits: 2,
-    }).format(amount || 0);
+    }).format(Number.isFinite(value) ? value : 0);
   } catch {
-    return `${code} ${(amount || 0).toLocaleString("en-NG")}`;
+    return `${code} ${(Number.isFinite(value) ? value : 0).toLocaleString("en-NG")}`;
   }
 }
 
 function formatDate(value?: string | null): string {
-  if (!value) {
-    return "—";
-  }
+  if (!value) return "—";
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
+  if (Number.isNaN(date.getTime())) return "—";
 
   return new Intl.DateTimeFormat("en-NG", {
     day: "numeric",
@@ -141,6 +166,56 @@ function formatDate(value?: string | null): string {
     year: "numeric",
   }).format(date);
 }
+
+function getProfilePayload(response: unknown): DashboardProfilePayload | null {
+  const result = response as Record<string, any> | null;
+
+  if (!result || typeof result !== "object") return null;
+
+  // Axios response or already-unwrapped response.
+  let payload = result.data ?? result;
+
+  // Support an additional API response wrapper.
+  if (payload?.data?.profile) {
+    payload = payload.data;
+  }
+
+  if (!payload?.profile) return null;
+
+  return payload as DashboardProfilePayload;
+}
+
+// =========================================================
+// APPLICATION STATUS CONSTANTS
+// =========================================================
+
+const REVIEW_STATUSES = [
+  "submitted",
+  "under_review",
+  "in_review",
+  "pending_review",
+  "credit_check",
+  "processing",
+  "review",
+];
+
+const OFFER_STATUSES = [
+  "approved",
+  "offer_created",
+  "offer_pending",
+  "pending_offer",
+  "offer_sent",
+  "accepted",
+];
+
+const MANDATE_STATUSES = [
+  "mandate_required",
+  "mandate_pending",
+  "pending_mandate",
+  "mandate_created",
+];
+
+const APPLICATION_REVIEW_STAGES = ["REVIEW"];
 
 // =========================================================
 // COMPONENT
@@ -151,114 +226,148 @@ export default function Dashboard() {
   const { user } = useAuth();
 
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
-
   const [loanDashboard, setLoanDashboard] = useState<LoanDashboard | null>(
     null,
   );
-
-  const [profileData, setProfileData] = useState<
-    DashboardProfileResponse["data"] | null
-  >(null);
+  const [profileData, setProfileData] =
+    useState<DashboardProfilePayload | null>(null);
 
   const [loading, setLoading] = useState(true);
-
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Prevent overlapping refreshes from focus, visibility and custom events.
+  const requestInProgress = useRef(false);
+  const refreshQueued = useRef(false);
+  const mountedRef = useRef(false);
+
   // =========================================================
-  // LOAD DASHBOARD, ONBOARDING AND PROFILE DATA
+  // LOAD AND REFRESH DASHBOARD
   // =========================================================
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadDashboard() {
-      setLoading(true);
-      setError(null);
-
-      const [onboardingResult, loanResult, profileResult] =
-        await Promise.allSettled([
-          onboardingApi.getStatus(),
-          myLoanApi.getLoanDashboard(),
-          API.get<DashboardProfileResponse>("/users/me/profile"),
-        ]);
-
-      if (!mounted) {
-        return;
-      }
-
-      let successfulRequests = 0;
-
-      // -----------------------------------------------------
-      // ONBOARDING STATUS
-      // -----------------------------------------------------
-
-      if (onboardingResult.status === "fulfilled") {
-        setStatus(onboardingResult.value);
-        successfulRequests += 1;
-      } else {
-        console.error(
-          "Failed to load onboarding status:",
-          onboardingResult.reason,
-        );
-      }
-
-      // -----------------------------------------------------
-      // LOAN DASHBOARD
-      // -----------------------------------------------------
-
-      if (loanResult.status === "fulfilled") {
-        setLoanDashboard(loanResult.value);
-        successfulRequests += 1;
-      } else {
-        console.error("Failed to load loan dashboard:", loanResult.reason);
-      }
-
-      // -----------------------------------------------------
-      // PROFILE
-      // -----------------------------------------------------
-
-      if (profileResult.status === "fulfilled") {
-        const response = profileResult.value as any;
-
-        // Support both an Axios response and an unwrapped API response.
-        const payload = response?.data ?? response;
-
-        // Some APIs wrap the payload one additional level.
-        const profilePayload = payload?.data?.profile ? payload.data : payload;
-
-        if (profilePayload?.profile) {
-          setProfileData(profilePayload);
-          successfulRequests += 1;
-        } else {
-          console.error(
-            "Profile response did not contain a profile:",
-            response,
-          );
-        }
-      } else {
-        console.error("Failed to load user profile:", profileResult.reason);
-      }
-
-      // -----------------------------------------------------
-      // SHOW ERROR ONLY IF ALL REQUESTS FAILED
-      // -----------------------------------------------------
-
-      if (successfulRequests === 0) {
-        setError("Unable to load your dashboard. Please try again.");
-      }
-
-      setLoading(false);
+  const loadDashboard = useCallback(async (showLoading = false) => {
+    if (requestInProgress.current) {
+      refreshQueued.current = true;
+      return;
     }
 
-    void loadDashboard();
+    requestInProgress.current = true;
 
-    return () => {
-      mounted = false;
-    };
+    if (showLoading) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+
+    setError(null);
+
+    try {
+      let shouldRefreshAgain = true;
+
+      // If another refresh is requested while loading, run one
+      // additional pass afterward instead of dropping the request.
+      while (shouldRefreshAgain && mountedRef.current) {
+        refreshQueued.current = false;
+
+        const [onboardingResult, loanResult, profileResult] =
+          await Promise.allSettled([
+            onboardingApi.getStatus(),
+            myLoanApi.getLoanDashboard(),
+            API.get<DashboardProfileResponse>("/users/me/profile"),
+          ]);
+
+        if (!mountedRef.current) return;
+
+        let successfulRequests = 0;
+
+        if (onboardingResult.status === "fulfilled") {
+          setStatus(onboardingResult.value);
+          successfulRequests++;
+        } else {
+          console.error(
+            "Failed to load onboarding status:",
+            onboardingResult.reason,
+          );
+        }
+
+        if (loanResult.status === "fulfilled") {
+          setLoanDashboard(loanResult.value);
+          successfulRequests++;
+        } else {
+          console.error("Failed to load loan dashboard:", loanResult.reason);
+        }
+
+        if (profileResult.status === "fulfilled") {
+          const payload = getProfilePayload(profileResult.value);
+
+          if (payload) {
+            setProfileData(payload);
+            successfulRequests++;
+          } else {
+            console.error(
+              "Profile API returned an unexpected response:",
+              profileResult.value,
+            );
+          }
+        } else {
+          console.error("Failed to load user profile:", profileResult.reason);
+        }
+
+        if (successfulRequests === 0) {
+          setError("Unable to load your dashboard. Please try again.");
+        }
+
+        shouldRefreshAgain = refreshQueued.current;
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        console.error("Dashboard refresh failed:", err);
+        setError("Unable to refresh your dashboard. Please try again.");
+      }
+    } finally {
+      requestInProgress.current = false;
+
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
   }, []);
 
+  useEffect(() => {
+    mountedRef.current = true;
+
+    void loadDashboard(true);
+
+    const handleFocus = () => {
+      void loadDashboard();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadDashboard();
+      }
+    };
+
+    const handleKycUpdated = () => {
+      void loadDashboard();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("kyc-updated", handleKycUpdated);
+
+    return () => {
+      mountedRef.current = false;
+
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("kyc-updated", handleKycUpdated);
+    };
+  }, [loadDashboard]);
+
   // =========================================================
-  // PROFILE STATUS
+  // PROFILE AND APPLICATION DATA
   // =========================================================
 
   const profile = profileData?.profile ?? null;
@@ -266,19 +375,39 @@ export default function Dashboard() {
   const profileApplication =
     profileData?.loanSummary?.activeApplication ?? null;
 
+  // Prefer the current onboarding application status when available.
   const profileApplicationStatus = normalizeStatus(
     profileApplication?.status || profileData?.loanSummary?.applicationStatus,
   );
 
+  const onboardingApplicationStatus = normalizeStatus(
+    status?.loan?.applicationStatus,
+  );
+
+  const onboardingLoanStatus = normalizeStatus(status?.loan?.status);
+
+  const applicationId =
+    profileApplication?._id || status?.loan?.applicationId || undefined;
+
+  const effectiveApplicationStatus =
+    onboardingApplicationStatus ||
+    profileApplicationStatus ||
+    onboardingLoanStatus;
+
   const profileOffer = useMemo(() => {
     const offers = profileData?.offers ?? [];
-    const applicationId = profileApplication?._id;
 
-    if (!applicationId) {
-      return undefined;
+    if (profileApplication?._id) {
+      const matchingOffer = offers.find(
+        (offer) => offer.loanApplication?._id === profileApplication._id,
+      );
+
+      if (matchingOffer) return matchingOffer;
     }
 
-    return offers.find((offer) => offer.loanApplication?._id === applicationId);
+    return offers.find((offer) =>
+      OFFER_STATUSES.includes(normalizeStatus(offer.status)),
+    );
   }, [profileData?.offers, profileApplication?._id]);
 
   const profileOfferStatus = normalizeStatus(
@@ -308,18 +437,7 @@ export default function Dashboard() {
 
   const loanCount = loans.length;
   const hasActiveLoan = Boolean(activeLoan);
-
   const repaymentSchedule = getRepaymentSchedule(activeLoan);
-
-  // =========================================================
-  // COMPLETED LOAN
-  // =========================================================
-  //
-  // Do not infer a completed loan from an accepted offer,
-  // approved application, or profile borrower status.
-  // A completed loan must be confirmed by loan/onboarding
-  // data that explicitly identifies completion.
-  // =========================================================
 
   // =========================================================
   // COMPLETED LOAN
@@ -327,28 +445,36 @@ export default function Dashboard() {
 
   const completedLoanFromStatus =
     status?.loan?.completed === true ||
-    normalizeStatus(status?.loan?.completedLoanStatus) === "completed";
+    isOneOf(status?.loan?.completedLoanStatus, [
+      "completed",
+      "fully_repaid",
+      "repaid",
+      "closed",
+      "settled",
+    ]);
 
   const completedLoanFromLoans = loans.some(isCompletedLoan);
 
   const completedLoanFromDashboard = Boolean(
-    loanDashboard?.activeLoan && isCompletedLoan(loanDashboard.activeLoan),
+    dashboardActiveLoan && isCompletedLoan(dashboardActiveLoan),
   );
 
-  const hasNewApplicationInProgress = Boolean(
-    profileApplication &&
-    !["completed", "cancelled", "rejected", "declined"].includes(
-      normalizeStatus(profileApplication.status),
-    ),
+  const hasCurrentApplication = Boolean(
+    (status?.loan?.exists &&
+      !isTerminalApplication(effectiveApplicationStatus)) ||
+    (profileApplication && !isTerminalApplication(profileApplication.status)),
   );
 
   const loanCompleted =
-    !hasNewApplicationInProgress &&
+    !hasCurrentApplication &&
     (completedLoanFromStatus ||
       completedLoanFromLoans ||
       completedLoanFromDashboard);
 
-  const canApplyForNewLoan = loanCompleted;
+  // Eligibility is distinct from the existence of a completed loan.
+  const canApplyForNewLoan =
+    status?.canApplyForNewLoan === true ||
+    status?.loan?.canApplyForNewLoan === true;
 
   // =========================================================
   // KYC
@@ -357,21 +483,19 @@ export default function Dashboard() {
   const profileKycStatus = normalizeStatus(profile?.kycStatus);
   const onboardingKycStatus = normalizeStatus(status?.kyc?.status);
 
-  // Treat either API's explicit verified status as complete.
   const profileKycComplete = isKycStatusComplete(profileKycStatus);
+
   const onboardingKycComplete =
     status !== null && onboardingApi.isKycComplete(status);
 
   const kycComplete = profileKycComplete || onboardingKycComplete;
 
-  // Prefer a verified result over a stale pending result.
+  // Never let an old pending status override a verified result.
   const kycStatus = kycComplete
     ? "verified"
     : profileKycStatus || onboardingKycStatus;
 
-  const kycSubmitted =
-    kycStatus === "submitted" || isKycStatusSubmitted(kycStatus);
-
+  const kycSubmitted = isKycStatusSubmitted(kycStatus);
   const kycRejected = !kycComplete && kycStatus === "rejected";
 
   // =========================================================
@@ -382,63 +506,42 @@ export default function Dashboard() {
     status?.bank?.completed === true && status?.bank?.verified === true;
 
   // =========================================================
-  // APPLICATION STATE
+  // APPLICATION STAGES
   // =========================================================
 
   const loanExists =
     status?.loan?.exists === true ||
     loanCount > 0 ||
     Boolean(profileApplication) ||
-    (profileData?.loanSummary?.totalApplications ?? 0) > 0 ||
-    loanCompleted;
-
-  const reviewStatuses = [
-    "submitted",
-    "under_review",
-    "in_review",
-    "pending_review",
-    "credit_check",
-    "processing",
-    "review",
-  ];
-
-  const offerStatuses = [
-    "approved",
-    "offer_created",
-    "offer_pending",
-    "pending_offer",
-    "offer_sent",
-    "accepted",
-  ];
-
-  const mandateStatuses = [
-    "mandate_required",
-    "mandate_pending",
-    "pending_mandate",
-    "mandate_created",
-  ];
+    Boolean(status?.loan?.applicationId) ||
+    (profileData?.loanSummary?.totalApplications ?? 0) > 0;
 
   const reviewActive =
     !loanCompleted &&
-    (reviewStatuses.includes(profileApplicationStatus) ||
-      status?.nextStep === "REVIEW");
+    (REVIEW_STATUSES.includes(profileApplicationStatus) ||
+      REVIEW_STATUSES.includes(onboardingApplicationStatus) ||
+      REVIEW_STATUSES.includes(onboardingLoanStatus) ||
+      APPLICATION_REVIEW_STAGES.includes(status?.nextStep ?? "") ||
+      (status?.nextStep === "REVIEW" && loanExists));
 
   const offerActive =
     !loanCompleted &&
-    (offerStatuses.includes(profileApplicationStatus) ||
-      offerStatuses.includes(profileOfferStatus) ||
-      status?.nextStep === "OFFER");
+    (OFFER_STATUSES.includes(profileApplicationStatus) ||
+      OFFER_STATUSES.includes(onboardingApplicationStatus) ||
+      OFFER_STATUSES.includes(profileOfferStatus) ||
+      status?.nextStep === "OFFER" ||
+      status?.loanOffer?.exists === true);
 
-  /*
-   * An accepted offer by itself does not prove that the
-   * user has reached the mandate stage. Use an explicit
-   * mandate state from the API.
-   */
+  const mandateStatus = normalizeStatus(status?.mandate?.status);
+
   const mandateActive =
     !loanCompleted &&
     (status?.nextStep === "MANDATE" ||
-      mandateStatuses.includes(profileApplicationStatus) ||
-      mandateStatuses.includes(profileOfferStatus));
+      status?.mandate?.exists === true ||
+      MANDATE_STATUSES.includes(profileApplicationStatus) ||
+      MANDATE_STATUSES.includes(onboardingApplicationStatus) ||
+      MANDATE_STATUSES.includes(profileOfferStatus) ||
+      MANDATE_STATUSES.includes(mandateStatus));
 
   const repaymentStatus = status?.repayment?.status ?? null;
 
@@ -451,11 +554,14 @@ export default function Dashboard() {
       hasActiveLoan);
 
   // =========================================================
-  // KYC STEP DISPLAY
+  // DISPLAY STATUS
   // =========================================================
 
+  const displayedApplicationStatus =
+    effectiveApplicationStatus || normalizeStatus(status?.currentStatus) || "";
+
   const kycStepLabel = kycComplete
-    ? "All 5 steps completed"
+    ? "Verified"
     : kycRejected
       ? "Rejected"
       : kycSubmitted
@@ -463,10 +569,6 @@ export default function Dashboard() {
         : kycStatus === "pending"
           ? "In progress"
           : "Not started";
-
-  // =========================================================
-  // REPAYMENT STATUS
-  // =========================================================
 
   const repaymentStatusLabel = repaymentStatus
     ? formatStatus(repaymentStatus)
@@ -494,269 +596,175 @@ export default function Dashboard() {
   // =========================================================
 
   const buttonText = useMemo(() => {
-    if (loanCompleted) {
+    if (loanCompleted && canApplyForNewLoan) {
       return "Apply for New Loan";
     }
 
-    if (!kycComplete) {
-      return "Complete KYC";
-    }
+    if (!kycComplete) return "Complete KYC";
 
-    if (repaymentActive) {
-      return "View Repayment";
-    }
+    if (repaymentActive) return "View Repayment";
 
-    if (hasActiveLoan) {
-      return "View Loan";
-    }
+    if (hasActiveLoan) return "View Loan";
 
-    if (mandateActive) {
-      return "Create Mandate";
-    }
+    if (mandateActive) return "Create Mandate";
 
-    if (offerActive) {
-      return "View Offer";
-    }
+    if (offerActive) return "View Offer";
 
-    if (reviewActive) {
-      return "View Application";
-    }
+    if (reviewActive) return "View Application";
 
-    if (!status && !profile) {
-      return "Start Application";
-    }
+    if (!bankComplete) return "Add Bank Account";
 
-    if (!bankComplete) {
-      return "Add Bank Account";
-    }
+    if (!status && !profile) return "Start Application";
 
     switch (status?.nextStep) {
       case "KYC":
         return "Complete KYC";
-
       case "BANK":
         return "Add Bank Account";
-
       case "LOAN":
         return "Apply for a Loan";
-
       case "OFFER":
         return "View Offer";
-
       case "MANDATE":
         return "Create Mandate";
-
       case "REPAYMENT":
         return "View Repayment";
-
       case "REVIEW":
         return "View Application";
-
       default:
         return loanExists ? "View Application" : "Apply for a Loan";
     }
   }, [
     loanCompleted,
+    canApplyForNewLoan,
     kycComplete,
     repaymentActive,
     hasActiveLoan,
     mandateActive,
     offerActive,
     reviewActive,
+    bankComplete,
     status,
     profile,
-    bankComplete,
     loanExists,
   ]);
 
   // =========================================================
-  // APPLY FOR NEW LOAN
+  // NAVIGATION HELPERS
   // =========================================================
 
   const applyForNewLoan = () => {
-    if (!loanCompleted) {
-      return;
-    }
+    if (!canApplyForNewLoan) return;
 
-    navigate("/loans", {
-      replace: true,
-    });
+    navigate("/loans");
   };
 
-  // =========================================================
-  // CONTINUE APPLICATION
-  // =========================================================
-
   const continueApplication = () => {
-    // A completed loan takes priority over stale nextStep data.
     if (loanCompleted) {
-      applyForNewLoan();
-      return;
-    }
-
-    // KYC must be completed before proceeding.
-    if (!kycComplete) {
-      navigate("/kyc", {
-        replace: true,
-      });
-      return;
-    }
-
-    // Repayment takes priority over application status.
-    if (repaymentActive) {
-      if (repaymentScheduleId) {
-        navigate(
-          `/loans/repayments/${encodeURIComponent(repaymentScheduleId)}`,
-          { replace: true },
-        );
-      } else {
-        navigate("/my-loans", {
-          replace: true,
-        });
+      if (canApplyForNewLoan) {
+        applyForNewLoan();
       }
+      return;
+    }
 
+    if (!kycComplete) {
+      navigate("/kyc");
+      return;
+    }
+
+    if (repaymentActive) {
+      navigate(
+        repaymentScheduleId
+          ? `/loans/repayments/${encodeURIComponent(repaymentScheduleId)}`
+          : "/my-loans",
+      );
       return;
     }
 
     if (hasActiveLoan) {
-      navigate("/my-loans", {
-        replace: true,
-      });
+      navigate("/my-loans");
       return;
     }
 
-    // Profile-backed application review.
-    if (reviewActive) {
-      if (profileApplication?._id) {
-        navigate(
-          `/loans/applications/${encodeURIComponent(profileApplication._id)}`,
-          { replace: true },
-        );
-      } else if (status?.loan?.loanId) {
-        navigate(
-          `/loans/applications/${encodeURIComponent(status.loan.loanId)}`,
-          { replace: true },
-        );
-      } else {
-        navigate("/loans/applications", {
-          replace: true,
-        });
-      }
-
-      return;
-    }
-
-    // Profile-backed offers.
-    if (offerActive) {
-      navigate("/loan-offers", {
-        replace: true,
-      });
-      return;
-    }
-
-    // Only enter the mandate flow when the API indicates it.
     if (mandateActive) {
-      if (status?.loanOffer?.offerId) {
-        navigate(
-          `/loan-offers/${encodeURIComponent(status.loanOffer.offerId)}`,
-          { replace: true },
-        );
-      } else {
-        navigate("/loan-offers", {
-          replace: true,
-        });
-      }
+      const offerId = status?.mandate?.offerId || status?.loanOffer?.offerId;
 
+      navigate(
+        offerId
+          ? `/loan-offers/${encodeURIComponent(offerId)}`
+          : "/loan-offers",
+      );
+      return;
+    }
+
+    if (offerActive) {
+      navigate("/loan-offers");
+      return;
+    }
+
+    if (reviewActive || loanExists) {
+      navigate(
+        applicationId
+          ? `/loans/applications/${encodeURIComponent(applicationId)}`
+          : "/loans/applications",
+      );
       return;
     }
 
     if (!status && !profile) {
-      navigate("/kyc", {
-        replace: true,
-      });
+      navigate("/kyc");
       return;
     }
 
     if (!bankComplete) {
-      navigate("/bank-accounts", {
-        replace: true,
-      });
+      navigate("/bank-accounts");
       return;
     }
 
     switch (status?.nextStep) {
       case "KYC":
-        navigate("/kyc", {
-          replace: true,
-        });
+        navigate("/kyc");
         break;
-
       case "BANK":
-        navigate("/bank-accounts", {
-          replace: true,
-        });
+        navigate("/bank-accounts");
         break;
-
       case "LOAN":
-        navigate("/loans", {
-          replace: true,
-        });
+        navigate("/loans");
         break;
-
       case "OFFER":
-        navigate("/loan-offers", {
-          replace: true,
-        });
+        navigate("/loan-offers");
         break;
+      case "MANDATE": {
+        const offerId = status.loanOffer?.offerId || status.mandate?.offerId;
 
-      case "MANDATE":
-        if (status.loanOffer?.offerId) {
-          navigate(
-            `/loan-offers/${encodeURIComponent(status.loanOffer.offerId)}`,
-            { replace: true },
-          );
-        } else {
-          navigate("/loan-offers", {
-            replace: true,
-          });
-        }
+        navigate(
+          offerId
+            ? `/loan-offers/${encodeURIComponent(offerId)}`
+            : "/loan-offers",
+        );
         break;
-
+      }
       case "REPAYMENT":
-        if (repaymentScheduleId) {
-          navigate(
-            `/loans/repayments/${encodeURIComponent(repaymentScheduleId)}`,
-            { replace: true },
-          );
-        } else {
-          navigate("/my-loans", {
-            replace: true,
-          });
-        }
+        navigate(
+          repaymentScheduleId
+            ? `/loans/repayments/${encodeURIComponent(repaymentScheduleId)}`
+            : "/my-loans",
+        );
         break;
-
       case "REVIEW":
-        if (status.loan?.loanId) {
-          navigate(
-            `/loans/applications/${encodeURIComponent(status.loan.loanId)}`,
-            { replace: true },
-          );
-        } else {
-          navigate("/loans/applications", {
-            replace: true,
-          });
-        }
+        navigate(
+          applicationId
+            ? `/loans/applications/${encodeURIComponent(applicationId)}`
+            : "/loans/applications",
+        );
         break;
-
       default:
-        navigate("/loans", {
-          replace: true,
-        });
+        navigate("/loans");
     }
   };
 
   // =========================================================
-  // APPLICATION TITLE
+  // APPLICATION TITLE AND DESCRIPTION
   // =========================================================
 
   const applicationTitle = loanCompleted
@@ -767,42 +775,36 @@ export default function Dashboard() {
         ? "Create your repayment mandate"
         : offerActive
           ? profileOfferStatus === "accepted" ||
-            profileApplicationStatus === "accepted"
+            effectiveApplicationStatus === "accepted"
             ? "Your offer has been accepted"
             : "Your offer is waiting for action"
           : reviewActive
             ? "Your application is under review"
-            : profileApplication
-              ? `Application ${formatStatus(profileApplication.status)}`
-              : loanExists
-                ? "Your loan application"
-                : "Get started with your loan";
-
-  // =========================================================
-  // APPLICATION DESCRIPTION
-  // =========================================================
+            : loanExists
+              ? `Application ${formatStatus(displayedApplicationStatus) || "In Progress"}`
+              : "Get started with your loan";
 
   const applicationDescription = loanCompleted
-    ? "Congratulations! Your previous loan has been completed. You can now apply for a new loan."
+    ? canApplyForNewLoan
+      ? "Your previous loan has been completed. You can now apply for a new loan."
+      : "Your previous loan is completed. Check your account eligibility before applying again."
     : repaymentActive
-      ? `Your repayment status is ${
-          repaymentStatusLabel || "Active"
-        }. Review your repayment details and outstanding balance.`
+      ? `Your repayment status is ${repaymentStatusLabel || "Active"}. Review your repayment details and outstanding balance.`
       : mandateActive
-        ? "Your application has reached the mandate stage. Continue to the offer page to review and authorize your repayment mandate."
+        ? "Your application has reached the mandate stage. Continue to review and authorize your repayment mandate."
         : offerActive
           ? profileOfferStatus === "accepted" ||
-            profileApplicationStatus === "accepted"
-            ? "Your offer has been accepted. Review your offer details and follow the next steps shown in your account."
-            : "Your loan offer or approval is being processed. Open your offers to review the available details and next action."
+            effectiveApplicationStatus === "accepted"
+            ? "Your offer has been accepted. Review your offer details and follow the next steps."
+            : "Your loan offer or approval is being processed. Open your offers to review the details and next action."
           : reviewActive
-            ? "Your application has been submitted and is being reviewed. You can open it to check its current status."
+            ? "Your application is being reviewed. Open your application to check its latest status."
             : !kycComplete
               ? "Complete your KYC verification before continuing with your loan application."
               : !bankComplete
                 ? "Verify your bank account before continuing with your loan application."
                 : loanExists
-                  ? "Continue to your application to view its current status."
+                  ? "Your application exists. Open it to view its current status and next steps."
                   : "Complete your verification and banking details before submitting a loan application.";
 
   // =========================================================
@@ -829,63 +831,68 @@ export default function Dashboard() {
       <Header />
 
       <main className="mx-auto max-w-7xl px-6 py-10">
-        {/* ERROR */}
-
         {error && (
           <section className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
             <div className="flex items-start gap-3">
               <AlertCircle size={20} className="mt-0.5 text-red-600" />
-
-              <div>
+              <div className="flex-1">
                 <h3 className="font-semibold text-red-900">
-                  Dashboard unavailable
+                  Dashboard update failed
                 </h3>
-
                 <p className="mt-1 text-sm text-red-800">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadDashboard()}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800"
+                >
+                  <RefreshCw size={15} />
+                  Try again
+                </button>
               </div>
             </div>
           </section>
         )}
 
-        {/* WELCOME */}
+        <section className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-slate-500">Welcome back</p>
+            <h2 className="mt-1 text-3xl font-bold text-slate-950">
+              Hi, {profile?.firstName || user?.firstName || "there"}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              Manage your verification, loan application, repayments, and loans
+              from your dashboard.
+            </p>
+          </div>
 
-        <section className="mb-8">
-          <p className="text-sm font-medium text-slate-500">Welcome back</p>
-
-          <h2 className="mt-1 text-3xl font-bold text-slate-950">
-            Hi, {profile?.firstName || user?.firstName || "there"}
-          </h2>
-
-          <p className="mt-2 text-sm text-slate-500">
-            Manage your verification, loan application, repayments, and loans
-            from your dashboard.
-          </p>
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => void loadDashboard()}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+          >
+            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+            {refreshing ? "Refreshing..." : "Refresh status"}
+          </button>
         </section>
-
-        {/* COMPLETED LOAN CELEBRATION */}
 
         {loanCompleted && (
           <section className="relative mb-8 overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-50 p-7 shadow-sm">
             <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-100/60 blur-2xl" />
-
             <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-4">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
                   <Sparkles size={27} />
                 </div>
-
                 <div>
                   <p className="text-sm font-semibold text-emerald-600">
                     Loan completed
                   </p>
-
                   <h3 className="mt-1 text-2xl font-bold text-emerald-950">
                     Congratulations! 🎉
                   </h3>
-
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-800">
-                    Your previous loan has been completed. You can now apply for
-                    a new loan.
+                    {applicationDescription}
                   </p>
                 </div>
               </div>
@@ -904,11 +911,7 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* MAIN CARDS */}
-
         <section className="grid gap-6 lg:grid-cols-3">
-          {/* APPLICATION CARD */}
-
           <div
             className={`rounded-3xl p-7 text-white lg:col-span-2 ${
               loanCompleted
@@ -927,10 +930,8 @@ export default function Dashboard() {
                 >
                   Loan application
                 </p>
-
                 <h3 className="mt-2 text-2xl font-bold">{applicationTitle}</h3>
               </div>
-
               {loanCompleted ? (
                 <CheckCircle2 size={34} className="shrink-0 text-emerald-300" />
               ) : (
@@ -949,7 +950,8 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={continueApplication}
-              className={`mt-7 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+              disabled={loanCompleted && !canApplyForNewLoan}
+              className={`mt-7 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
                 loanCompleted
                   ? "bg-emerald-400 text-emerald-950 hover:bg-emerald-300 focus:ring-emerald-400"
                   : "bg-white text-slate-950 hover:bg-slate-100 focus:ring-white"
@@ -960,20 +962,16 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* APPLICATION PROGRESS */}
-
           <div className="rounded-3xl border border-slate-200 bg-white p-7">
             <h3 className="font-bold text-slate-950">Application progress</h3>
 
             <div className="mt-6 space-y-5">
-              {!kycComplete && (
-                <StatusItem
-                  icon={<FileCheck2 size={19} />}
-                  title="KYC"
-                  complete={false}
-                  status={kycStepLabel}
-                />
-              )}
+              <StatusItem
+                icon={<FileCheck2 size={19} />}
+                title="KYC"
+                complete={kycComplete}
+                status={kycStepLabel}
+              />
 
               <StatusItem
                 icon={<Landmark size={19} />}
@@ -985,19 +983,19 @@ export default function Dashboard() {
               <StatusItem
                 icon={<WalletCards size={19} />}
                 title={loanCompleted ? "Previous loan" : "Loan application"}
-                complete={loanExists}
+                complete={loanCompleted || loanExists}
                 status={
                   loanCompleted
                     ? "Completed"
-                    : profileApplication?.status
-                      ? formatStatus(profileApplication.status)
+                    : displayedApplicationStatus
+                      ? formatStatus(displayedApplicationStatus)
                       : loanExists
                         ? "Application exists"
                         : !kycComplete
                           ? "Complete KYC first"
                           : !bankComplete
                             ? "Verify bank account first"
-                            : "Pending"
+                            : "Not started"
                 }
               />
 
@@ -1008,7 +1006,7 @@ export default function Dashboard() {
                   complete={reviewActive || hasActiveLoan}
                   status={
                     hasActiveLoan
-                      ? "Completed"
+                      ? "Loan active"
                       : reviewActive
                         ? "In progress"
                         : loanExists
@@ -1024,7 +1022,7 @@ export default function Dashboard() {
                 complete={loanCompleted || repaymentActive}
                 status={
                   loanCompleted
-                    ? "🎉 Fully repaid"
+                    ? "Fully repaid"
                     : repaymentStatus
                       ? formatStatus(repaymentStatus)
                       : repaymentActive
@@ -1033,7 +1031,7 @@ export default function Dashboard() {
                 }
                 completed={loanCompleted}
                 action={
-                  loanCompleted
+                  loanCompleted && canApplyForNewLoan
                     ? {
                         label: "Apply for New Loan",
                         onClick: applyForNewLoan,
@@ -1045,85 +1043,38 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* LOAN SUMMARY */}
-
         {!loanCompleted && loanCount > 0 && (
-          <section className="mb-8 grid gap-4 sm:grid-cols-3">
+          <section className="mb-8 mt-6 grid gap-4 sm:grid-cols-3">
             <SummaryCard
               label="Total borrowed"
               value={formatCurrency(totalBorrowed, currency)}
             />
-
             <SummaryCard
               label="Total paid"
               value={formatCurrency(totalPaid, currency)}
             />
-
             <SummaryCard
               label="Outstanding"
               value={formatCurrency(totalOutstanding, currency)}
             />
           </section>
         )}
-        {/* REPAYMENT INFORMATION */}
-
-        {repaymentActive && !loanCompleted && (
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Repayment status
-                </p>
-
-                <h3 className="mt-1 text-lg font-bold text-slate-950">
-                  {repaymentStatusLabel}
-                </h3>
-
-                {repaymentScheduleId && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Repayment schedule available
-                  </p>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (repaymentScheduleId) {
-                    navigate(
-                      `/loans/repayments/${encodeURIComponent(
-                        repaymentScheduleId,
-                      )}`,
-                    );
-                  } else {
-                    navigate("/my-loans");
-                  }
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                View repayment
-                <ArrowRight size={17} />
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* KYC INFORMATION */}
 
         {!kycComplete && !loanCompleted && (
           <section className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
             <div className="flex items-start gap-3">
               <Clock3 size={20} className="mt-0.5 text-blue-600" />
-
               <div>
                 <h3 className="font-semibold text-blue-900">
-                  Complete your KYC
+                  {kycRejected
+                    ? "KYC verification rejected"
+                    : "Complete your KYC"}
                 </h3>
-
                 <p className="mt-1 text-sm leading-6 text-blue-800">
-                  Complete your KYC verification before applying for a loan.
+                  {kycRejected
+                    ? "Your KYC verification was rejected. Open KYC to review the issue and follow the next steps."
+                    : "Complete your KYC verification before continuing with your loan application."}
                 </p>
-
                 <button
                   type="button"
                   onClick={() => navigate("/kyc")}
@@ -1136,8 +1087,6 @@ export default function Dashboard() {
             </div>
           </section>
         )}
-
-        {/* ACTIVE LOAN */}
 
         {activeLoan && !loanCompleted && (
           <ActiveLoanCard
@@ -1182,15 +1131,12 @@ function ActiveLoanCard({
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm text-slate-500">Active loan</p>
-
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <h3 className="text-xl font-bold text-slate-950">
               {loan.loanNumber || "Current loan"}
             </h3>
-
             <LoanStatusBadge status={loan.status} />
           </div>
-
           <p className="mt-2 text-sm text-slate-500">
             {loan.repaymentFrequency
               ? `${formatStatus(loan.repaymentFrequency)} repayment`
@@ -1213,9 +1159,7 @@ function ActiveLoanCard({
           label="Principal"
           value={formatCurrency(loan.principalAmount, currency)}
         />
-
         <LoanMetric label="Paid" value={formatCurrency(amountPaid, currency)} />
-
         <LoanMetric
           label="Outstanding"
           value={formatCurrency(outstanding, currency)}
@@ -1227,7 +1171,6 @@ function ActiveLoanCard({
           <p className="text-xs font-semibold text-slate-600">
             Repayment progress
           </p>
-
           <p className="text-xs font-semibold text-slate-500">
             {Math.round(progress)}%
           </p>
@@ -1244,9 +1187,7 @@ function ActiveLoanCard({
       {schedule && (
         <div className="mt-6 flex flex-wrap gap-3 text-xs text-slate-500">
           <span>{schedule.installments.length} installments</span>
-
           <span>•</span>
-
           <span>Due {formatDate(schedule.finalDueDate)}</span>
         </div>
       )}
@@ -1264,7 +1205,6 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
         {label}
       </p>
-
       <p className="mt-2 text-xl font-bold text-slate-950">{value}</p>
     </div>
   );
@@ -1300,10 +1240,8 @@ function StatusItem({
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <CheckCircle2 size={21} />
             </div>
-
             <div>
               <p className="text-sm font-bold text-emerald-950">{title}</p>
-
               <p className="mt-0.5 text-xs font-medium text-emerald-700">
                 {status}
               </p>
@@ -1336,10 +1274,8 @@ function StatusItem({
       >
         {complete ? <CheckCircle2 size={19} /> : icon}
       </div>
-
       <div>
         <p className="text-sm font-semibold text-slate-900">{title}</p>
-
         <p className="text-xs text-slate-500">{status}</p>
       </div>
     </div>
@@ -1354,7 +1290,6 @@ function LoanMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-slate-50 p-4">
       <p className="text-xs text-slate-500">{label}</p>
-
       <p className="mt-1 text-lg font-bold text-slate-950">{value}</p>
     </div>
   );
@@ -1383,7 +1318,7 @@ function LoanStatusBadge({ status }: { status: string }) {
     <span
       className={`rounded-full px-3 py-1 text-xs font-semibold ${className}`}
     >
-      {formatStatus(status)}
+      {formatStatus(status) || "Unknown"}
     </span>
   );
 }

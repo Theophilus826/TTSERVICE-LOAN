@@ -22,12 +22,7 @@ export interface OnboardingStatus {
 
   kyc: {
     completed: boolean;
-    status:
-      | "NOT_STARTED"
-      | "PENDING"
-      | "SUBMITTED"
-      | "VERIFIED"
-      | "REJECTED";
+    status: "NOT_STARTED" | "PENDING" | "SUBMITTED" | "VERIFIED" | "REJECTED";
   };
 
   bank: {
@@ -106,7 +101,15 @@ const onboardingApi = {
   async getStatus(): Promise<OnboardingStatus> {
     const response = await API.get("/onboarding/status");
 
-    return response.data.onboarding;
+    const onboarding = response.data?.onboarding;
+
+    if (!onboarding) {
+      throw new Error(
+        "Invalid onboarding status response: missing onboarding data",
+      );
+    }
+
+    return onboarding as OnboardingStatus;
   },
 
   /**

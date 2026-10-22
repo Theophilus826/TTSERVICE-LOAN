@@ -1,3 +1,4 @@
+
 import {
   ArrowRight,
   CheckCircle2,
@@ -19,7 +20,10 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import onboardingApi, { type OnboardingStatus } from "../services/onboarding";
+import onboardingApi, {
+  type OnboardingStatus,
+  type OnboardingStep,
+} from "../services/onboarding";
 import myLoanApi, {
   type CustomerLoan,
   type LoanDashboard,
@@ -39,6 +43,11 @@ interface DashboardProfile {
   borrowerStatus?: string;
   kycStatus?: string;
   isVerified?: boolean;
+  kyc?: {
+    status?: string;
+    completed?: boolean;
+    isVerified?: boolean;
+  };
 }
 
 interface ProfileApplication {
@@ -149,7 +158,9 @@ function formatCurrency(
       maximumFractionDigits: 2,
     }).format(Number.isFinite(value) ? value : 0);
   } catch {
-    return `${code} ${(Number.isFinite(value) ? value : 0).toLocaleString("en-NG")}`;
+    return `${code} ${
+      (Number.isFinite(value) ? value : 0).toLocaleString("en-NG")
+    }`;
   }
 }
 
@@ -167,15 +178,15 @@ function formatDate(value?: string | null): string {
   }).format(date);
 }
 
-function getProfilePayload(response: unknown): DashboardProfilePayload | null {
+function getProfilePayload(
+  response: unknown,
+): DashboardProfilePayload | null {
   const result = response as Record<string, any> | null;
 
   if (!result || typeof result !== "object") return null;
 
-  // Axios response or already-unwrapped response.
   let payload = result.data ?? result;
 
-  // Support an additional API response wrapper.
   if (payload?.data?.profile) {
     payload = payload.data;
   }
@@ -215,8 +226,6 @@ const MANDATE_STATUSES = [
   "mandate_created",
 ];
 
-const APPLICATION_REVIEW_STAGES = ["REVIEW"];
-
 // =========================================================
 // COMPONENT
 // =========================================================
@@ -236,7 +245,6 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prevent overlapping refreshes from focus, visibility and custom events.
   const requestInProgress = useRef(false);
   const refreshQueued = useRef(false);
   const mountedRef = useRef(false);
@@ -264,8 +272,6 @@ export default function Dashboard() {
     try {
       let shouldRefreshAgain = true;
 
-      // If another refresh is requested while loading, run one
-      // additional pass afterward instead of dropping the request.
       while (shouldRefreshAgain && mountedRef.current) {
         refreshQueued.current = false;
 
@@ -339,9 +345,7 @@ export default function Dashboard() {
 
     void loadDashboard(true);
 
-    const handleFocus = () => {
-      void loadDashboard();
-    };
+    const handleFocus = () => void loadDashboard();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -349,9 +353,7 @@ export default function Dashboard() {
       }
     };
 
-    const handleKycUpdated = () => {
-      void loadDashboard();
-    };
+    const handleKycUpdated = () => void loadDashboard();
 
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -371,13 +373,12 @@ export default function Dashboard() {
   // =========================================================
 
   const profile = profileData?.profile ?? null;
-
   const profileApplication =
     profileData?.loanSummary?.activeApplication ?? null;
 
-  // Prefer the current onboarding application status when available.
   const profileApplicationStatus = normalizeStatus(
-    profileApplication?.status || profileData?.loanSummary?.applicationStatus,
+    profileApplication?.status ||
+      profileData?.loanSummary?.applicationStatus,
   );
 
   const onboardingApplicationStatus = normalizeStatus(
@@ -413,6 +414,53 @@ export default function Dashboard() {
   const profileOfferStatus = normalizeStatus(
     profileOffer?.status || profileData?.loanSummary?.offerStatus,
   );
+
+  // =========================================================
+  // KYC AND BANK
+  // =========================================================
+
+  const profileKycStatus = normalizeStatus(
+    profile?.kycStatus || profile?.kyc?.status,
+  );
+
+  const onboardingKycStatus = normalizeStatus(status?.kyc?.status);
+
+  const profileKycComplete =
+    isKycStatusComplete(profileKycStatus) ||
+    profile?.kyc?.completed === true ||
+    profile?.kyc?.isVerified === true ||
+    profile?.isVerified === true;
+
+  const onboardingKycComplete =
+    status !== null && onboardingApi.isKycComplete(status);
+
+  const kycComplete = profileKycComplete || onboardingKycComplete;
+
+  const kycStatus = kycComplete
+    ? "verified"
+    : profileKycStatus || onboardingKycStatus;
+
+  const kycSubmitted = isKycStatusSubmitted(kycStatus);
+  const kycRejected = !kycComplete && kycStatus === "rejected";
+
+  // Verified KYC automatically marks the bank step complete.
+  const bankComplete = kycComplete;
+
+  // Prevent a stale backend BANK nextStep from blocking a verified user.
+  const effectiveNextStep: OnboardingStep | undefined =
+    kycComplete && status?.nextStep === "BANK"
+      ? "LOAN"
+      : status?.nextStep;
+
+  const kycStepLabel = kycComplete
+    ? "Verified"
+    : kycRejected
+      ? "Rejected"
+      : kycSubmitted
+        ? "Submitted / under review"
+        : kycStatus === "pending"
+          ? "In progress"
+          : "Not started";
 
   // =========================================================
   // LOAN DATA
@@ -462,7 +510,8 @@ export default function Dashboard() {
   const hasCurrentApplication = Boolean(
     (status?.loan?.exists &&
       !isTerminalApplication(effectiveApplicationStatus)) ||
-    (profileApplication && !isTerminalApplication(profileApplication.status)),
+      (profileApplication &&
+        !isTerminalApplication(profileApplication.status)),
   );
 
   const loanCompleted =
@@ -471,39 +520,9 @@ export default function Dashboard() {
       completedLoanFromLoans ||
       completedLoanFromDashboard);
 
-  // Eligibility is distinct from the existence of a completed loan.
   const canApplyForNewLoan =
     status?.canApplyForNewLoan === true ||
     status?.loan?.canApplyForNewLoan === true;
-
-  // =========================================================
-  // KYC
-  // =========================================================
-
-  const profileKycStatus = normalizeStatus(profile?.kycStatus);
-  const onboardingKycStatus = normalizeStatus(status?.kyc?.status);
-
-  const profileKycComplete = isKycStatusComplete(profileKycStatus);
-
-  const onboardingKycComplete =
-    status !== null && onboardingApi.isKycComplete(status);
-
-  const kycComplete = profileKycComplete || onboardingKycComplete;
-
-  // Never let an old pending status override a verified result.
-  const kycStatus = kycComplete
-    ? "verified"
-    : profileKycStatus || onboardingKycStatus;
-
-  const kycSubmitted = isKycStatusSubmitted(kycStatus);
-  const kycRejected = !kycComplete && kycStatus === "rejected";
-
-  // =========================================================
-  // BANK
-  // =========================================================
-
-  const bankComplete =
-    status?.bank?.completed === true && status?.bank?.verified === true;
 
   // =========================================================
   // APPLICATION STAGES
@@ -521,22 +540,21 @@ export default function Dashboard() {
     (REVIEW_STATUSES.includes(profileApplicationStatus) ||
       REVIEW_STATUSES.includes(onboardingApplicationStatus) ||
       REVIEW_STATUSES.includes(onboardingLoanStatus) ||
-      APPLICATION_REVIEW_STAGES.includes(status?.nextStep ?? "") ||
-      (status?.nextStep === "REVIEW" && loanExists));
+      effectiveNextStep === "REVIEW");
 
   const offerActive =
     !loanCompleted &&
     (OFFER_STATUSES.includes(profileApplicationStatus) ||
       OFFER_STATUSES.includes(onboardingApplicationStatus) ||
       OFFER_STATUSES.includes(profileOfferStatus) ||
-      status?.nextStep === "OFFER" ||
+      effectiveNextStep === "OFFER" ||
       status?.loanOffer?.exists === true);
 
   const mandateStatus = normalizeStatus(status?.mandate?.status);
 
   const mandateActive =
     !loanCompleted &&
-    (status?.nextStep === "MANDATE" ||
+    (effectiveNextStep === "MANDATE" ||
       status?.mandate?.exists === true ||
       MANDATE_STATUSES.includes(profileApplicationStatus) ||
       MANDATE_STATUSES.includes(onboardingApplicationStatus) ||
@@ -545,30 +563,19 @@ export default function Dashboard() {
 
   const repaymentStatus = status?.repayment?.status ?? null;
 
-  const repaymentScheduleId = status?.repayment?.repaymentScheduleId ?? null;
+  const repaymentScheduleId =
+    status?.repayment?.repaymentScheduleId ?? null;
 
   const repaymentActive =
     !loanCompleted &&
-    (status?.nextStep === "REPAYMENT" ||
+    (effectiveNextStep === "REPAYMENT" ||
       status?.repayment?.exists === true ||
       hasActiveLoan);
 
-  // =========================================================
-  // DISPLAY STATUS
-  // =========================================================
-
   const displayedApplicationStatus =
-    effectiveApplicationStatus || normalizeStatus(status?.currentStatus) || "";
-
-  const kycStepLabel = kycComplete
-    ? "Verified"
-    : kycRejected
-      ? "Rejected"
-      : kycSubmitted
-        ? "Submitted / under review"
-        : kycStatus === "pending"
-          ? "In progress"
-          : "Not started";
+    effectiveApplicationStatus ||
+    normalizeStatus(status?.currentStatus) ||
+    "";
 
   const repaymentStatusLabel = repaymentStatus
     ? formatStatus(repaymentStatus)
@@ -582,7 +589,8 @@ export default function Dashboard() {
 
   const summary = loanDashboard?.summary;
 
-  const totalBorrowed = summary?.totalBorrowed ?? summary?.totalPrincipal ?? 0;
+  const totalBorrowed =
+    summary?.totalBorrowed ?? summary?.totalPrincipal ?? 0;
 
   const totalPaid = summary?.totalPaid ?? 0;
 
@@ -603,24 +611,18 @@ export default function Dashboard() {
     if (!kycComplete) return "Complete KYC";
 
     if (repaymentActive) return "View Repayment";
-
     if (hasActiveLoan) return "View Loan";
-
     if (mandateActive) return "Create Mandate";
-
     if (offerActive) return "View Offer";
-
     if (reviewActive) return "View Application";
 
-    if (!bankComplete) return "Add Bank Account";
-
+    // A verified user never needs to complete a separate bank step.
     if (!status && !profile) return "Start Application";
 
-    switch (status?.nextStep) {
+    switch (effectiveNextStep) {
       case "KYC":
         return "Complete KYC";
       case "BANK":
-        return "Add Bank Account";
       case "LOAN":
         return "Apply for a Loan";
       case "OFFER":
@@ -643,14 +645,14 @@ export default function Dashboard() {
     mandateActive,
     offerActive,
     reviewActive,
-    bankComplete,
+    effectiveNextStep,
     status,
     profile,
     loanExists,
   ]);
 
   // =========================================================
-  // NAVIGATION HELPERS
+  // NAVIGATION
   // =========================================================
 
   const applyForNewLoan = () => {
@@ -687,7 +689,8 @@ export default function Dashboard() {
     }
 
     if (mandateActive) {
-      const offerId = status?.mandate?.offerId || status?.loanOffer?.offerId;
+      const offerId =
+        status?.mandate?.offerId || status?.loanOffer?.offerId;
 
       navigate(
         offerId
@@ -716,26 +719,22 @@ export default function Dashboard() {
       return;
     }
 
-    if (!bankComplete) {
-      navigate("/bank-accounts");
+    // Verified KYC means bank is complete: skip BANK.
+    if (effectiveNextStep === "BANK" || effectiveNextStep === "LOAN") {
+      navigate("/loans");
       return;
     }
 
-    switch (status?.nextStep) {
+    switch (effectiveNextStep) {
       case "KYC":
         navigate("/kyc");
-        break;
-      case "BANK":
-        navigate("/bank-accounts");
-        break;
-      case "LOAN":
-        navigate("/loans");
         break;
       case "OFFER":
         navigate("/loan-offers");
         break;
       case "MANDATE": {
-        const offerId = status.loanOffer?.offerId || status.mandate?.offerId;
+        const offerId =
+          status?.loanOffer?.offerId || status?.mandate?.offerId;
 
         navigate(
           offerId
@@ -781,7 +780,9 @@ export default function Dashboard() {
           : reviewActive
             ? "Your application is under review"
             : loanExists
-              ? `Application ${formatStatus(displayedApplicationStatus) || "In Progress"}`
+              ? `Application ${
+                  formatStatus(displayedApplicationStatus) || "In Progress"
+                }`
               : "Get started with your loan";
 
   const applicationDescription = loanCompleted
@@ -789,7 +790,9 @@ export default function Dashboard() {
       ? "Your previous loan has been completed. You can now apply for a new loan."
       : "Your previous loan is completed. Check your account eligibility before applying again."
     : repaymentActive
-      ? `Your repayment status is ${repaymentStatusLabel || "Active"}. Review your repayment details and outstanding balance.`
+      ? `Your repayment status is ${
+          repaymentStatusLabel || "Active"
+        }. Review your repayment details and outstanding balance.`
       : mandateActive
         ? "Your application has reached the mandate stage. Continue to review and authorize your repayment mandate."
         : offerActive
@@ -801,11 +804,9 @@ export default function Dashboard() {
             ? "Your application is being reviewed. Open your application to check its latest status."
             : !kycComplete
               ? "Complete your KYC verification before continuing with your loan application."
-              : !bankComplete
-                ? "Verify your bank account before continuing with your loan application."
-                : loanExists
-                  ? "Your application exists. Open it to view its current status and next steps."
-                  : "Complete your verification and banking details before submitting a loan application.";
+              : loanExists
+                ? "Your application exists. Open it to view its current status and next steps."
+                : "Your KYC is verified. Continue to the loan application.";
 
   // =========================================================
   // LOADING
@@ -871,7 +872,10 @@ export default function Dashboard() {
             onClick={() => void loadDashboard()}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
           >
-            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+            <RefreshCw
+              size={16}
+              className={refreshing ? "animate-spin" : ""}
+            />
             {refreshing ? "Refreshing..." : "Refresh status"}
           </button>
         </section>
@@ -933,9 +937,15 @@ export default function Dashboard() {
                 <h3 className="mt-2 text-2xl font-bold">{applicationTitle}</h3>
               </div>
               {loanCompleted ? (
-                <CheckCircle2 size={34} className="shrink-0 text-emerald-300" />
+                <CheckCircle2
+                  size={34}
+                  className="shrink-0 text-emerald-300"
+                />
               ) : (
-                <WalletCards size={32} className="shrink-0 text-slate-400" />
+                <WalletCards
+                  size={32}
+                  className="shrink-0 text-slate-400"
+                />
               )}
             </div>
 
@@ -977,7 +987,7 @@ export default function Dashboard() {
                 icon={<Landmark size={19} />}
                 title="Bank account"
                 complete={bankComplete}
-                status={bankComplete ? "Verified" : "Pending"}
+                status={bankComplete ? "Completed with KYC" : "Pending"}
               />
 
               <StatusItem
@@ -993,9 +1003,7 @@ export default function Dashboard() {
                         ? "Application exists"
                         : !kycComplete
                           ? "Complete KYC first"
-                          : !bankComplete
-                            ? "Verify bank account first"
-                            : "Not started"
+                          : "Ready to apply"
                 }
               />
 
@@ -1304,9 +1312,11 @@ function LoanStatusBadge({ status }: { status: string }) {
 
   const isPositive = ["active", "disbursed", "repaying"].includes(normalized);
 
-  const isWarning = ["overdue", "pending_disbursement", "disbursing"].includes(
-    normalized,
-  );
+  const isWarning = [
+    "overdue",
+    "pending_disbursement",
+    "disbursing",
+  ].includes(normalized);
 
   const className = isPositive
     ? "bg-green-100 text-green-700"

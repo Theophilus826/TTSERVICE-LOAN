@@ -1,3 +1,4 @@
+
 import API from "./Api";
 
 export type OnboardingStep =
@@ -13,11 +14,6 @@ export interface OnboardingStatus {
   nextStep: OnboardingStep;
   currentStatus: string | null;
 
-  /**
-   * True when the user has fully repaid a previous loan
-   * and does not currently have another active loan,
-   * offer, or application.
-   */
   canApplyForNewLoan: boolean;
 
   kyc: {
@@ -25,6 +21,8 @@ export interface OnboardingStatus {
     status: "NOT_STARTED" | "PENDING" | "SUBMITTED" | "VERIFIED" | "REJECTED";
   };
 
+  // Retained for compatibility with the existing API response.
+  // Bank completion is derived from KYC verification in this service.
   bank: {
     completed: boolean;
     verified: boolean;
@@ -33,46 +31,13 @@ export interface OnboardingStatus {
   loan: {
     exists: boolean;
     status: string | null;
-
-    /**
-     * Current loan ID, or the completed loan ID when
-     * there is no active loan.
-     */
     loanId: string | null;
-
-    /**
-     * Current loan application ID.
-     */
     applicationId: string | null;
-
-    /**
-     * Status of the current loan application.
-     */
     applicationStatus: string | null;
-
-    /**
-     * Loan product associated with the application/loan.
-     */
     loanProduct: unknown | null;
-
-    /**
-     * True when the user has a completed loan.
-     */
     completed: boolean;
-
-    /**
-     * ID of the most recently completed loan.
-     */
     completedLoanId: string | null;
-
-    /**
-     * Status of the completed loan.
-     */
     completedLoanStatus: string | null;
-
-    /**
-     * Same eligibility flag exposed at the loan level.
-     */
     canApplyForNewLoan: boolean;
   };
 
@@ -100,7 +65,6 @@ export interface OnboardingStatus {
 const onboardingApi = {
   async getStatus(): Promise<OnboardingStatus> {
     const response = await API.get("/onboarding/status");
-
     const onboarding = response.data?.onboarding;
 
     if (!onboarding) {
@@ -113,35 +77,33 @@ const onboardingApi = {
   },
 
   /**
-   * KYC is considered fully completed only when:
-   * 1. The backend says kyc.completed === true
-   * 2. The KYC status is VERIFIED
-   *
-   * This prevents the application from entering the LOAN stage
-   * while any of the KYC steps are still incomplete.
+   * KYC is complete only when the backend confirms
+   * completion and the status is VERIFIED.
    */
   isKycComplete(status: OnboardingStatus): boolean {
     return (
-      status.kyc.completed === true &&
-      String(status.kyc.status).trim().toUpperCase() === "VERIFIED"
+      status.kyc?.completed === true &&
+      String(status.kyc?.status ?? "").trim().toUpperCase() === "VERIFIED"
     );
   },
 
   /**
-   * The user can only proceed to the loan stage after
-   * completing KYC and verifying a bank account.
+   * A verified KYC automatically completes the bank step.
+   * No separate bank verification check is required here.
+   */
+  isBankComplete(status: OnboardingStatus): boolean {
+    return this.isKycComplete(status);
+  },
+
+  /**
+   * Proceed to the loan stage once KYC is verified.
    */
   canProceedToLoan(status: OnboardingStatus): boolean {
-    return (
-      this.isKycComplete(status) &&
-      status.bank.completed === true &&
-      status.bank.verified === true
-    );
+    return this.isKycComplete(status);
   },
 
   /**
-   * The user has completely repaid a previous loan and
-   * is eligible to start a new loan application.
+   * Checks whether the user is eligible to apply for a new loan.
    */
   canApplyForNewLoan(status: OnboardingStatus): boolean {
     return (
@@ -155,10 +117,11 @@ const onboardingApi = {
    */
   isLoanCompleted(status: OnboardingStatus): boolean {
     return (
-      status.currentStatus === "COMPLETED" ||
+      String(status.currentStatus ?? "").toUpperCase() === "COMPLETED" ||
       status.loan?.completed === true ||
-      status.loan?.completedLoanStatus === "completed" ||
-      status.loan?.status === "completed"
+      String(status.loan?.completedLoanStatus ?? "").toUpperCase() ===
+        "COMPLETED" ||
+      String(status.loan?.status ?? "").toUpperCase() === "COMPLETED"
     );
   },
 };

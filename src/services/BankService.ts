@@ -1,3 +1,4 @@
+// src/services/bankApi.ts
 import API from "./Api";
 
 export interface Bank {
@@ -70,14 +71,18 @@ const bankApi = {
   async verifyBankAccount(
     accountId: string,
   ): Promise<BankAccountResponse> {
-    const response = await API.post(`/banks/${accountId}/verify`);
+    const response = await API.post(
+      `/banks/${accountId}/verify`,
+    );
     return response.data;
   },
 
   async setPrimaryBankAccount(
     accountId: string,
   ): Promise<BankAccountResponse> {
-    const response = await API.patch(`/banks/${accountId}/primary`);
+    const response = await API.patch(
+      `/banks/${accountId}/primary`,
+    );
     return response.data;
   },
 };

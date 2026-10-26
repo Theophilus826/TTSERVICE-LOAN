@@ -1,8 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   RefreshCw,
@@ -28,21 +24,11 @@ type KycStatus =
   | "verified"
   | "rejected";
 
-type VerificationStatus =
-  | "not_started"
-  | "pending"
-  | "verified"
-  | "failed";
+type VerificationStatus = "not_started" | "pending" | "verified" | "failed";
 
-type DvaStatus =
-  | "pending"
-  | "active"
-  | "failed";
+type DvaStatus = "pending" | "active" | "failed";
 
-type RepaymentAccountStatus =
-  | "active"
-  | "suspended"
-  | "closed";
+type RepaymentAccountStatus = "active" | "suspended" | "closed";
 
 interface KycUser {
   _id?: string;
@@ -193,7 +179,7 @@ const getStatusClass = (status?: KycStatus | null): string => {
 };
 
 const getVerificationStatusClass = (
-  status?: VerificationStatus | null
+  status?: VerificationStatus | null,
 ): string => {
   switch (status) {
     case "verified":
@@ -211,9 +197,7 @@ const getVerificationStatusClass = (
   }
 };
 
-const getDvaStatusClass = (
-  status?: DvaStatus | null
-): string => {
+const getDvaStatusClass = (status?: DvaStatus | null): string => {
   switch (status) {
     case "active":
       return "bg-green-100 text-green-700";
@@ -228,7 +212,7 @@ const getDvaStatusClass = (
 };
 
 const getAccountStatusClass = (
-  status?: RepaymentAccountStatus | null
+  status?: RepaymentAccountStatus | null,
 ): string => {
   switch (status) {
     case "active":
@@ -245,9 +229,7 @@ const getAccountStatusClass = (
   }
 };
 
-const formatVerificationStatus = (
-  status?: string | null
-): string => {
+const formatVerificationStatus = (status?: string | null): string => {
   if (!status) return "Not started";
 
   return status
@@ -255,10 +237,7 @@ const formatVerificationStatus = (
     .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-const formatCurrency = (
-  amount?: number | null,
-  currency = "NGN"
-): string => {
+const formatCurrency = (amount?: number | null, currency = "NGN"): string => {
   const numericAmount = Number(amount ?? 0);
 
   return new Intl.NumberFormat("en-NG", {
@@ -285,14 +264,11 @@ const AdminKycDetail = () => {
     try {
       setLoading(true);
 
-      const response = await API.get<KycResponse>(
-        `/kyc/admin/${id}`
-      );
+      const response = await API.get<KycResponse>(`/kyc/admin/${id}`);
 
+      
       if (!response.data?.data) {
-        toast.error(
-          response.data?.message || "KYC record not found"
-        );
+        toast.error(response.data?.message || "KYC record not found");
 
         setKyc(null);
         return;
@@ -304,8 +280,7 @@ const AdminKycDetail = () => {
 
       if (axios.isAxiosError(error)) {
         toast.error(
-          error.response?.data?.message ||
-            "Failed to load KYC details"
+          error.response?.data?.message || "Failed to load KYC details",
         );
       } else {
         toast.error("Failed to load KYC details");
@@ -323,7 +298,7 @@ const AdminKycDetail = () => {
     if (!id || !kyc) return;
 
     const confirmed = window.confirm(
-      "Are you sure you want to verify this KYC?"
+      "Are you sure you want to verify this KYC?",
     );
 
     if (!confirmed) return;
@@ -331,9 +306,7 @@ const AdminKycDetail = () => {
     try {
       setProcessing(true);
 
-      const response = await API.patch<KycResponse>(
-        `/kyc/admin/${id}/verify`
-      );
+      const response = await API.patch<KycResponse>(`/kyc/admin/${id}/verify`);
 
       const updatedKyc = response.data?.data;
 
@@ -341,41 +314,26 @@ const AdminKycDetail = () => {
         setKyc(updatedKyc);
       }
 
-      const repaymentAccount =
-        updatedKyc?.repaymentAccount;
+      const repaymentAccount = updatedKyc?.repaymentAccount;
 
-      if (
-        repaymentAccount?.dvaStatus === "active"
-      ) {
+      if (repaymentAccount?.dvaStatus === "active") {
+        toast.success("KYC verified and repayment account activated");
+      } else if (repaymentAccount?.dvaStatus === "pending") {
         toast.success(
-          "KYC verified and repayment account activated"
+          "KYC verified. Repayment account provisioning is in progress.",
         );
-      } else if (
-        repaymentAccount?.dvaStatus === "pending"
-      ) {
-        toast.success(
-          "KYC verified. Repayment account provisioning is in progress."
-        );
-      } else if (
-        response.data?.repaymentAccountProvisioningError
-      ) {
+      } else if (response.data?.repaymentAccountProvisioningError) {
         toast.warning(
-          "KYC verified, but repayment account provisioning needs attention."
+          "KYC verified, but repayment account provisioning needs attention.",
         );
       } else {
-        toast.success(
-          response.data?.message ||
-            "KYC verified successfully"
-        );
+        toast.success(response.data?.message || "KYC verified successfully");
       }
     } catch (error) {
       console.error("Failed to verify KYC:", error);
 
       if (axios.isAxiosError(error)) {
-        toast.error(
-          error.response?.data?.message ||
-            "Failed to verify KYC"
-        );
+        toast.error(error.response?.data?.message || "Failed to verify KYC");
       } else {
         toast.error("Failed to verify KYC");
       }
@@ -387,9 +345,7 @@ const AdminKycDetail = () => {
   const rejectKyc = async () => {
     if (!id || !kyc) return;
 
-    const reason = window.prompt(
-      "Enter the reason for rejecting this KYC:"
-    );
+    const reason = window.prompt("Enter the reason for rejecting this KYC:");
 
     if (!reason?.trim()) {
       return;
@@ -398,29 +354,20 @@ const AdminKycDetail = () => {
     try {
       setProcessing(true);
 
-      const response = await API.patch<KycResponse>(
-        `/kyc/admin/${id}/reject`,
-        {
-          rejectionReason: reason.trim(),
-        }
-      );
+      const response = await API.patch<KycResponse>(`/kyc/admin/${id}/reject`, {
+        rejectionReason: reason.trim(),
+      });
 
       if (response.data?.data) {
         setKyc(response.data.data);
       }
 
-      toast.success(
-        response.data?.message ||
-          "KYC rejected successfully"
-      );
+      toast.success(response.data?.message || "KYC rejected successfully");
     } catch (error) {
       console.error("Failed to reject KYC:", error);
 
       if (axios.isAxiosError(error)) {
-        toast.error(
-          error.response?.data?.message ||
-            "Failed to reject KYC"
-        );
+        toast.error(error.response?.data?.message || "Failed to reject KYC");
       } else {
         toast.error("Failed to reject KYC");
       }
@@ -469,21 +416,15 @@ const AdminKycDetail = () => {
 
   const customerName =
     `${kyc.firstName || ""} ${kyc.lastName || ""}`.trim() ||
-    `${kyc.user?.firstName || ""} ${
-      kyc.user?.lastName || ""
-    }`.trim() ||
+    `${kyc.user?.firstName || ""} ${kyc.user?.lastName || ""}`.trim() ||
     kyc.user?.name ||
     "Unknown customer";
 
   const repaymentAccount = kyc.repaymentAccount;
 
-  const canVerify =
-    kyc.status !== "verified" &&
-    kyc.status !== "rejected";
+  const canVerify = kyc.status !== "verified" && kyc.status !== "rejected";
 
-  const canReject =
-    kyc.status !== "verified" &&
-    kyc.status !== "rejected";
+  const canReject = kyc.status !== "verified" && kyc.status !== "rejected";
 
   return (
     <div className="space-y-6 pb-28">
@@ -500,13 +441,10 @@ const AdminKycDetail = () => {
           </button>
 
           <div>
-            <h1 className="text-xl font-bold text-gray-900">
-              KYC Details
-            </h1>
+            <h1 className="text-xl font-bold text-gray-900">KYC Details</h1>
 
             <p className="text-sm text-gray-500">
-              Review customer identity and verification
-              information
+              Review customer identity and verification information
             </p>
           </div>
         </div>
@@ -517,11 +455,7 @@ const AdminKycDetail = () => {
           disabled={loading || processing}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <RefreshCw
-            className={`h-4 w-4 ${
-              loading ? "animate-spin" : ""
-            }`}
-          />
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </button>
       </div>
@@ -539,21 +473,21 @@ const AdminKycDetail = () => {
                 {customerName}
               </h2>
 
-              <p className="text-sm text-gray-500">
-                {kyc.user?.email || "No email"}
-              </p>
-
-              {kyc.user?.phone && (
-                <p className="text-sm text-gray-500">
-                  {kyc.user.phone}
+              <div className="mt-1 space-y-1">
+                <p className="break-all text-sm text-gray-500">
+                  {kyc.user?.email || "No email"}
                 </p>
-              )}
+
+                <p className="break-all text-sm text-gray-500">
+                  Phone: {kyc.user?.phone || "No phone number"}
+                </p>
+              </div>
             </div>
           </div>
 
           <span
             className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-sm font-medium ${getStatusClass(
-              kyc.status
+              kyc.status,
             )}`}
           >
             {formatStatus(kyc.status)}
@@ -574,35 +508,17 @@ const AdminKycDetail = () => {
         </div>
 
         <div className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <InfoItem
-            label="First Name"
-            value={kyc.firstName}
-          />
+          <InfoItem label="First Name" value={kyc.firstName} />
 
-          <InfoItem
-            label="Last Name"
-            value={kyc.lastName}
-          />
+          <InfoItem label="Last Name" value={kyc.lastName} />
 
-          <InfoItem
-            label="Date of Birth"
-            value={formatDate(kyc.dateOfBirth)}
-          />
+          <InfoItem label="Date of Birth" value={formatDate(kyc.dateOfBirth)} />
 
-          <InfoItem
-            label="Gender"
-            value={kyc.gender}
-          />
+          <InfoItem label="Gender" value={kyc.gender} />
 
-          <InfoItem
-            label="Country"
-            value={kyc.country}
-          />
+          <InfoItem label="Country" value={kyc.country} />
 
-          <InfoItem
-            label="KYC ID"
-            value={kyc._id}
-          />
+          <InfoItem label="KYC ID" value={kyc._id} />
         </div>
       </section>
 
@@ -612,9 +528,7 @@ const AdminKycDetail = () => {
           <div className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-gray-500" />
 
-            <h2 className="font-semibold text-gray-900">
-              Verification Status
-            </h2>
+            <h2 className="font-semibold text-gray-900">Verification Status</h2>
           </div>
         </div>
 
@@ -629,9 +543,7 @@ const AdminKycDetail = () => {
             {kyc.bvnLast4 && (
               <p className="mt-2 text-xs text-gray-500">
                 BVN ending in{" "}
-                <span className="font-medium">
-                  {kyc.bvnLast4}
-                </span>
+                <span className="font-medium">{kyc.bvnLast4}</span>
               </p>
             )}
 
@@ -646,17 +558,13 @@ const AdminKycDetail = () => {
           <VerificationCard
             title="Customer Verification"
             status={kyc.customerVerificationStatus}
-            reference={
-              kyc.customerVerificationReference
-            }
+            reference={kyc.customerVerificationReference}
             verifiedAt={kyc.customerVerifiedAt}
           >
             {kyc.verificationProvider && (
               <p className="mt-2 text-xs text-gray-500">
                 Provider:{" "}
-                <span className="font-medium">
-                  {kyc.verificationProvider}
-                </span>
+                <span className="font-medium">{kyc.verificationProvider}</span>
               </p>
             )}
 
@@ -699,15 +607,13 @@ const AdminKycDetail = () => {
             <div className="flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-gray-500" />
 
-              <h2 className="font-semibold text-gray-900">
-                Repayment Account
-              </h2>
+              <h2 className="font-semibold text-gray-900">Repayment Account</h2>
             </div>
 
             {repaymentAccount && (
               <span
                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getAccountStatusClass(
-                  repaymentAccount.status
+                  repaymentAccount.status,
                 )}`}
               >
                 {formatStatus(repaymentAccount.status)}
@@ -728,15 +634,12 @@ const AdminKycDetail = () => {
                   </p>
 
                   <p className="mt-1 text-sm text-yellow-700">
-                    No repayment account is currently
-                    attached to this customer.
+                    No repayment account is currently attached to this customer.
                   </p>
 
                   {kyc.repaymentAccountProvisioningError && (
                     <p className="mt-2 text-sm text-red-600">
-                      {
-                        kyc.repaymentAccountProvisioningError
-                      }
+                      {kyc.repaymentAccountProvisioningError}
                     </p>
                   )}
                 </div>
@@ -753,44 +656,37 @@ const AdminKycDetail = () => {
                     </p>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      Paystack repayment account provisioning
-                      status
+                      Paystack repayment account provisioning status
                     </p>
                   </div>
 
                   <span
                     className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-sm font-medium ${getDvaStatusClass(
-                      repaymentAccount.dvaStatus
+                      repaymentAccount.dvaStatus,
                     )}`}
                   >
-                    {formatStatus(
-                      repaymentAccount.dvaStatus
-                    )}
+                    {formatStatus(repaymentAccount.dvaStatus)}
                   </span>
                 </div>
 
-                {repaymentAccount.dvaStatus ===
-                  "pending" && (
+                {repaymentAccount.dvaStatus === "pending" && (
                   <div className="mt-3 rounded-lg bg-yellow-50 p-3 text-sm text-yellow-700">
-                    The repayment account has been requested
-                    and is waiting for Paystack to assign the
-                    dedicated account.
+                    The repayment account has been requested and is waiting for
+                    Paystack to assign the dedicated account.
                   </div>
                 )}
 
-                {repaymentAccount.dvaStatus ===
-                  "failed" && (
+                {repaymentAccount.dvaStatus === "failed" && (
                   <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                    Dedicated virtual account provisioning
-                    failed. The account may need to be retried.
+                    Dedicated virtual account provisioning failed. The account
+                    may need to be retried.
                   </div>
                 )}
 
-                {repaymentAccount.dvaStatus ===
-                  "active" && (
+                {repaymentAccount.dvaStatus === "active" && (
                   <div className="mt-3 rounded-lg bg-green-50 p-3 text-sm text-green-700">
-                    Dedicated virtual account is active and
-                    ready to receive repayments.
+                    Dedicated virtual account is active and ready to receive
+                    repayments.
                   </div>
                 )}
               </div>
@@ -799,61 +695,40 @@ const AdminKycDetail = () => {
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 <InfoItem
                   label="Account Number"
-                  value={
-                    repaymentAccount.accountNumber ||
-                    "Pending"
-                  }
-                  highlight={
-                    repaymentAccount.dvaStatus === "active"
-                  }
+                  value={repaymentAccount.accountNumber || "Pending"}
+                  highlight={repaymentAccount.dvaStatus === "active"}
                 />
 
                 <InfoItem
                   label="Account Name"
-                  value={
-                    repaymentAccount.accountName ||
-                    "Pending"
-                  }
+                  value={repaymentAccount.accountName || "Pending"}
                 />
 
                 <InfoItem
                   label="Bank"
-                  value={
-                    repaymentAccount.bankName ||
-                    "Pending"
-                  }
+                  value={repaymentAccount.bankName || "Pending"}
                 />
 
                 <InfoItem
                   label="Bank Code"
-                  value={
-                    repaymentAccount.bankCode ||
-                    "—"
-                  }
+                  value={repaymentAccount.bankCode || "—"}
                 />
 
                 <InfoItem
                   label="Currency"
-                  value={
-                    repaymentAccount.currency ||
-                    "NGN"
-                  }
+                  value={repaymentAccount.currency || "NGN"}
                 />
 
                 <InfoItem
                   label="Provider"
-                  value={
-                    repaymentAccount.provider ||
-                    "—"
-                  }
+                  value={repaymentAccount.provider || "—"}
                 />
 
                 <InfoItem
                   label="Balance"
                   value={formatCurrency(
                     repaymentAccount.balance,
-                    repaymentAccount.currency ||
-                      "NGN"
+                    repaymentAccount.currency || "NGN",
                   )}
                   highlight
                 />
@@ -862,8 +737,7 @@ const AdminKycDetail = () => {
                   label="Total Credited"
                   value={formatCurrency(
                     repaymentAccount.totalCredited,
-                    repaymentAccount.currency ||
-                      "NGN"
+                    repaymentAccount.currency || "NGN",
                   )}
                 />
 
@@ -871,8 +745,7 @@ const AdminKycDetail = () => {
                   label="Total Repaid"
                   value={formatCurrency(
                     repaymentAccount.totalRepaid,
-                    repaymentAccount.currency ||
-                      "NGN"
+                    repaymentAccount.currency || "NGN",
                   )}
                 />
               </div>
@@ -888,18 +761,12 @@ const AdminKycDetail = () => {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <InfoItem
                       label="Provider Customer Code"
-                      value={
-                        repaymentAccount.providerCustomerCode ||
-                        "—"
-                      }
+                      value={repaymentAccount.providerCustomerCode || "—"}
                     />
 
                     <InfoItem
                       label="Provider Account ID"
-                      value={
-                        repaymentAccount.providerAccountId ||
-                        "—"
-                      }
+                      value={repaymentAccount.providerAccountId || "—"}
                     />
                   </div>
                 </div>
@@ -915,33 +782,18 @@ const AdminKycDetail = () => {
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-gray-500" />
 
-            <h2 className="font-semibold text-gray-900">
-              Address
-            </h2>
+            <h2 className="font-semibold text-gray-900">Address</h2>
           </div>
         </div>
 
         <div className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <InfoItem
-            label="Address"
-            value={kyc.address}
-            fullWidth
-          />
+          <InfoItem label="Address" value={kyc.address} fullWidth />
 
-          <InfoItem
-            label="City"
-            value={kyc.city}
-          />
+          <InfoItem label="City" value={kyc.city} />
 
-          <InfoItem
-            label="State"
-            value={kyc.state}
-          />
+          <InfoItem label="State" value={kyc.state} />
 
-          <InfoItem
-            label="Country"
-            value={kyc.country}
-          />
+          <InfoItem label="Country" value={kyc.country} />
         </div>
       </section>
 
@@ -951,22 +803,14 @@ const AdminKycDetail = () => {
           <div className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-gray-500" />
 
-            <h2 className="font-semibold text-gray-900">
-              Identification
-            </h2>
+            <h2 className="font-semibold text-gray-900">Identification</h2>
           </div>
         </div>
 
         <div className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <InfoItem
-            label="ID Type"
-            value={formatStatus(kyc.idType)}
-          />
+          <InfoItem label="ID Type" value={formatStatus(kyc.idType)} />
 
-          <InfoItem
-            label="ID Number"
-            value={kyc.idNumber}
-          />
+          <InfoItem label="ID Number" value={kyc.idNumber} />
         </div>
       </section>
 
@@ -976,9 +820,7 @@ const AdminKycDetail = () => {
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-gray-500" />
 
-            <h2 className="font-semibold text-gray-900">
-              Documents
-            </h2>
+            <h2 className="font-semibold text-gray-900">Documents</h2>
           </div>
         </div>
 
@@ -1003,27 +845,16 @@ const AdminKycDetail = () => {
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-gray-500" />
 
-            <h2 className="font-semibold text-gray-900">
-              Review Information
-            </h2>
+            <h2 className="font-semibold text-gray-900">Review Information</h2>
           </div>
         </div>
 
         <div className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <InfoItem
-            label="Submitted At"
-            value={formatDate(kyc.submittedAt)}
-          />
+          <InfoItem label="Submitted At" value={formatDate(kyc.submittedAt)} />
 
-          <InfoItem
-            label="Verified At"
-            value={formatDate(kyc.verifiedAt)}
-          />
+          <InfoItem label="Verified At" value={formatDate(kyc.verifiedAt)} />
 
-          <InfoItem
-            label="Verified By"
-            value={kyc.verifiedBy}
-          />
+          <InfoItem label="Verified By" value={kyc.verifiedBy} />
 
           {kyc.rejectionReason && (
             <InfoItem
@@ -1049,9 +880,7 @@ const AdminKycDetail = () => {
               >
                 <XCircle className="h-4 w-4" />
 
-                {processing
-                  ? "Processing..."
-                  : "Reject KYC"}
+                {processing ? "Processing..." : "Reject KYC"}
               </button>
             )}
 
@@ -1068,9 +897,7 @@ const AdminKycDetail = () => {
                   <CheckCircle className="h-4 w-4" />
                 )}
 
-                {processing
-                  ? "Processing..."
-                  : "Verify KYC"}
+                {processing ? "Processing..." : "Verify KYC"}
               </button>
             )}
           </div>
@@ -1106,8 +933,8 @@ const InfoItem = ({
           danger
             ? "text-red-600"
             : highlight
-            ? "font-semibold text-gray-900"
-            : "text-gray-800"
+              ? "font-semibold text-gray-900"
+              : "text-gray-800"
         }`}
       >
         {value || "—"}
@@ -1135,18 +962,14 @@ const VerificationCard = ({
     <div className="rounded-lg border border-gray-200 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-gray-900">
-            {title}
-          </p>
+          <p className="text-sm font-medium text-gray-900">{title}</p>
 
-          <p className="mt-1 text-xs text-gray-500">
-            Verification result
-          </p>
+          <p className="mt-1 text-xs text-gray-500">Verification result</p>
         </div>
 
         <span
           className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${getVerificationStatusClass(
-            status
+            status,
           )}`}
         >
           {formatVerificationStatus(status)}
@@ -1176,20 +999,14 @@ interface DocumentPreviewProps {
   url?: string | null;
 }
 
-const DocumentPreview = ({
-  title,
-  icon,
-  url,
-}: DocumentPreviewProps) => {
+const DocumentPreview = ({ title, icon, url }: DocumentPreviewProps) => {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {icon}
 
-          <h3 className="text-sm font-medium text-gray-900">
-            {title}
-          </h3>
+          <h3 className="text-sm font-medium text-gray-900">{title}</h3>
         </div>
 
         {url && (

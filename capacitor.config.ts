@@ -1,3 +1,4 @@
+
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
@@ -6,8 +7,14 @@ const config: CapacitorConfig = {
   webDir: 'dist',
 
   server: {
-    url: "https://ttservice-loan.onrender.com",
+    url: 'https://ttservice-loan.onrender.com',
     cleartext: false,
+  },
+
+  plugins: {
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
   },
 };
 

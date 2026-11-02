@@ -92,7 +92,7 @@ import AdminLoanApplicationDetails from "../admin/AdminLoanApplicationDetails";
 import AdminRepaymentsPage from "../admin/AdminRepaymentsPage";
 import AdminNotifications from "../admin/AdminNotifications";
 import AppActivityDashboard from "../admin/AppActivityDashboard";
-
+import FloatingRemindersPage from "../admin/FloatingRemindersPage";
 /* =========================================================
 ROLE CONFIGURATION
 ========================================================= */
@@ -337,7 +337,10 @@ PUBLIC ROUTES
         ============================================= */}
 
               <Route path="mandates" element={<AdminMandates />} />
-
+              <Route
+                path="/admin/floating-reminders"
+                element={<FloatingRemindersPage />}
+              />
               {/* =============================================
             TRANSFERS
         ============================================= */}

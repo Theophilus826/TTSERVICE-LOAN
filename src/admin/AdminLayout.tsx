@@ -140,6 +140,12 @@ const navigation: readonly NavigationItem[] = [
     permission: "transfers:view",
   },
   {
+    name: "Floating Reminders",
+    path: "/admin/floating-reminders",
+    icon: Bell,
+    permission: "settings:view",
+  },
+  {
     name: "Repayments",
     path: "/admin/repayments",
     icon: CreditCard,

@@ -2,7 +2,7 @@
 import API from "./Api";
 
 // =========================================================
-// TYPES
+// REPAYMENT TYPES
 // =========================================================
 
 export type AdminRepaymentStatus =
@@ -132,7 +132,7 @@ export interface AdminRepayment {
 }
 
 // =========================================================
-// PAGINATION
+// REPAYMENT PAGINATION
 // =========================================================
 
 export interface AdminRepaymentsPagination {
@@ -144,7 +144,7 @@ export interface AdminRepaymentsPagination {
 }
 
 // =========================================================
-// QUERY PARAMETERS
+// REPAYMENT QUERY PARAMETERS
 // =========================================================
 
 export interface GetAdminRepaymentsParams {
@@ -235,10 +235,91 @@ export interface AutoDebitRunResponse {
 }
 
 // =========================================================
+// FLOATING REMINDER TYPES
+// =========================================================
+
+export type FloatingReminderStatus =
+  | "active"
+  | "cooldown"
+  | "disabled"
+  | "permission_denied"
+  | "error";
+
+export interface FloatingReminderUser {
+  _id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  accountStatus?: string;
+}
+
+export interface FloatingReminder {
+  _id: string;
+
+  user: FloatingReminderUser | null;
+
+  enabled: boolean;
+  consentGranted: boolean;
+  overlayPermissionGranted: boolean;
+
+  status: FloatingReminderStatus;
+
+  unpaidInstallments: number;
+  unpaidAmount: number;
+  currency: string;
+
+  cooldownUntil?: string | null;
+  lastPaymentAt?: string | null;
+  lastReminderAt?: string | null;
+
+  lastEvent?: string | null;
+  lastError?: string | null;
+
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FloatingReminderPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface GetFloatingRemindersParams {
+  status?: FloatingReminderStatus | "";
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface FloatingReminderListResponse {
+  reminders: FloatingReminder[];
+  pagination: FloatingReminderPagination;
+}
+
+export interface FloatingReminderSummary {
+  total: number;
+  enabled: number;
+  active: number;
+  cooldown: number;
+  disabled: number;
+  permissionDenied: number;
+  errors: number;
+  unpaidInstallments: number;
+  unpaidAmount: number;
+}
+
+// =========================================================
 // ADMIN REPAYMENT API
 // =========================================================
 
 const adminRepaymentApi = {
+  // -------------------------------------------------------
+  // GET REPAYMENTS
+  // -------------------------------------------------------
+
   /**
    * Get paginated repayments with optional filters.
    */
@@ -251,6 +332,47 @@ const adminRepaymentApi = {
 
     return response.data.data;
   },
+
+  // -------------------------------------------------------
+  // FLOATING REMINDER DASHBOARD
+  // -------------------------------------------------------
+
+  /**
+   * Get paginated floating reminder records.
+   *
+   * Optional filters:
+   * - status
+   * - search
+   * - page
+   * - limit
+   */
+  async getFloatingReminders(
+    params: GetFloatingRemindersParams = {}
+  ): Promise<FloatingReminderListResponse> {
+    const response = await API.get(
+      "/admin/repayments/floating-reminders",
+      {
+        params,
+      }
+    );
+
+    return response.data.data;
+  },
+
+  /**
+   * Get floating reminder dashboard statistics.
+   */
+  async getFloatingReminderSummary(): Promise<FloatingReminderSummary> {
+    const response = await API.get(
+      "/admin/repayments/floating-reminders/summary"
+    );
+
+    return response.data.data;
+  },
+
+  // -------------------------------------------------------
+  // MANDATE COLLECTION
+  // -------------------------------------------------------
 
   /**
    * Collect a repayment using an authorized mandate.
@@ -271,6 +393,10 @@ const adminRepaymentApi = {
     return response.data.data;
   },
 
+  // -------------------------------------------------------
+  // PAYMENT RECONCILIATION
+  // -------------------------------------------------------
+
   /**
    * Reconcile a Paystack DVA payment against a loan.
    */
@@ -290,6 +416,10 @@ const adminRepaymentApi = {
     return response.data.data;
   },
 
+  // -------------------------------------------------------
+  // AUTO-DEBIT PREVIEW
+  // -------------------------------------------------------
+
   /**
    * Preview installments eligible for auto-debit.
    * This endpoint must not initiate any payments.
@@ -302,10 +432,16 @@ const adminRepaymentApi = {
     return response.data.data;
   },
 
+  // -------------------------------------------------------
+  // AUTO-DEBIT RUN
+  // -------------------------------------------------------
+
   /**
    * Request backend processing of eligible auto-debit
-   * collections. The backend must validate mandates,
-   * prevent duplicate charges, and verify provider outcomes.
+   * collections.
+   *
+   * The backend must validate mandates, prevent duplicate
+   * charges, and verify provider outcomes.
    */
   async runAutoDebit(): Promise<AutoDebitRunResponse> {
     const response = await API.post(

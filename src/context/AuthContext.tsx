@@ -54,11 +54,8 @@ export interface AuthContextValue {
 
   // Authentication
   login(data: LoginData): Promise<AuthUser>;
-
   register(data: RegisterData): Promise<AuthUser>;
-
   logout(): Promise<void>;
-
   refreshUser(): Promise<AuthUser | null>;
 
   resetPassword(
@@ -73,9 +70,7 @@ export interface AuthContextValue {
   }>;
 
   enableBiometricLogin(): Promise<void>;
-
   disableBiometricLogin(): Promise<void>;
-
   loginWithBiometrics(): Promise<AuthUser>;
 
   // Roles
@@ -86,15 +81,10 @@ export interface AuthContextValue {
   ): boolean;
 
   isAdmin(): boolean;
-
   isSuperAdmin(): boolean;
-
   isLoanOfficer(): boolean;
-
   isRiskOfficer(): boolean;
-
   isFinance(): boolean;
-
   isSupport(): boolean;
 }
 
@@ -134,42 +124,48 @@ export const AuthProvider = ({
      LOADING STATES
   ======================================================= */
 
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
 
-  const [initializing, setInitializing] = useState<boolean>(true);
+  const [initializing, setInitializing] = useState(true);
 
   const [biometricLoading, setBiometricLoading] =
-    useState<boolean>(false);
+    useState(false);
 
   /* =======================================================
      BIOMETRIC STATES
+
+     Availability and registration are independent
+     from the visibility of the fingerprint icon.
   ======================================================= */
 
   const [isBiometricAvailable, setIsBiometricAvailable] =
-    useState<boolean>(false);
+    useState(false);
 
   const [isBiometricEnabled, setIsBiometricEnabled] =
-    useState<boolean>(false);
+    useState(false);
 
   /* =======================================================
      RESTORE SESSION
   ======================================================= */
 
   const restoreSession = useCallback(async (): Promise<void> => {
-    const token = authApi.getToken();
-
-    if (!token) {
-      setUser(null);
-      setInitializing(false);
-      return;
-    }
-
     try {
+      const token = authApi.getToken();
+
+      if (!token) {
+        setUser(null);
+        return;
+      }
+
       const currentUser = await authApi.getMe();
 
       setUser(currentUser);
     } catch (error) {
-      console.error("Session restoration failed:", error);
+      console.error(
+        "Session restoration failed:",
+        error,
+      );
+
       setUser(null);
     } finally {
       setInitializing(false);
@@ -182,6 +178,9 @@ export const AuthProvider = ({
 
   /* =======================================================
      CHECK BIOMETRIC AVAILABILITY
+
+     This function does not enable biometrics.
+     It only checks device support and saved registration.
   ======================================================= */
 
   const checkBiometricAvailability =
@@ -193,13 +192,20 @@ export const AuthProvider = ({
         const available =
           await biometricAuth.isBiometricAvailable();
 
-        const enabled =
-          available &&
-          await biometricAuth.isBiometricEnabled();
+        let enabled = false;
+
+        if (available) {
+          enabled =
+            await biometricAuth.isBiometricEnabled();
+        }
 
         setIsBiometricAvailable(available);
         setIsBiometricEnabled(enabled);
-        return { available, enabled };
+
+        return {
+          available,
+          enabled,
+        };
       } catch (error) {
         console.error(
           "Biometric availability check failed:",
@@ -208,9 +214,17 @@ export const AuthProvider = ({
 
         setIsBiometricAvailable(false);
         setIsBiometricEnabled(false);
-        return { available: false, enabled: false };
+
+        return {
+          available: false,
+          enabled: false,
+        };
       }
     }, []);
+
+  /* =======================================================
+     INITIAL BIOMETRIC CHECK
+  ======================================================= */
 
   useEffect(() => {
     void checkBiometricAvailability();
@@ -286,7 +300,7 @@ export const AuthProvider = ({
   }, [user, initializing]);
 
   /* =======================================================
-     NORMAL LOGIN
+     NORMAL PIN LOGIN
   ======================================================= */
 
   const login = useCallback(
@@ -300,8 +314,7 @@ export const AuthProvider = ({
           );
         }
 
-        const identifier =
-          data.identifier.trim();
+        const identifier = data.identifier.trim();
 
         const normalizedIdentifier =
           isValidNigerianPhone(identifier)
@@ -318,7 +331,7 @@ export const AuthProvider = ({
 
         setUser(authenticatedUser);
 
-        // Check whether biometric login is available.
+        // Refresh biometric status after login.
         await checkBiometricAvailability();
 
         return authenticatedUser;
@@ -404,6 +417,16 @@ export const AuthProvider = ({
 
         await biometricAuth.enableBiometricLogin();
 
+        // Verify that registration was saved.
+        const enabled =
+          await biometricAuth.isBiometricEnabled();
+
+        if (!enabled) {
+          throw new Error(
+            "Fingerprint login could not be enabled. Please try again.",
+          );
+        }
+
         setIsBiometricAvailable(true);
         setIsBiometricEnabled(true);
       } finally {
@@ -438,15 +461,33 @@ export const AuthProvider = ({
       setBiometricLoading(true);
 
       try {
+        // Check actual device support.
         const available =
           await biometricAuth.isBiometricAvailable();
 
+        setIsBiometricAvailable(available);
+
         if (!available) {
+          setIsBiometricEnabled(false);
+
           throw new Error(
-            "Fingerprint authentication is unavailable.",
+            "Fingerprint authentication is unavailable on this device.",
           );
         }
 
+        // Check whether the user registered biometrics.
+        const enabled =
+          await biometricAuth.isBiometricEnabled();
+
+        setIsBiometricEnabled(enabled);
+
+        if (!enabled) {
+          throw new Error(
+            "Fingerprint login has not been enabled. Please sign in with your PIN first.",
+          );
+        }
+
+        // Perform actual biometric authentication.
         const authenticatedUser =
           await biometricAuth.loginWithBiometrics();
 
@@ -481,9 +522,9 @@ export const AuthProvider = ({
         );
       }
 
-      // Do not delete biometric credentials here.
-      // The user can still use fingerprint login
-      // the next time they open MenuMoney.
+      // Preserve biometric credentials.
+      // Logout must not automatically disable
+      // fingerprint login.
 
       setUser(null);
       setLoading(false);
@@ -510,8 +551,13 @@ export const AuthProvider = ({
 
         return currentUser;
       } catch (error) {
-        console.error("User refresh failed:", error);
+        console.error(
+          "User refresh failed:",
+          error,
+        );
+
         setUser(null);
+
         return null;
       }
     },
@@ -572,9 +618,10 @@ export const AuthProvider = ({
         return false;
       }
 
-      const allowedRoles = Array.isArray(roles)
-        ? roles
-        : [roles];
+      const allowedRoles: readonly UserRole[] =
+        Array.isArray(roles)
+          ? roles as readonly UserRole[]
+          : [roles as UserRole];
 
       return allowedRoles.includes(user.role);
     },

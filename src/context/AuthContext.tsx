@@ -67,6 +67,7 @@ export interface AuthContextValue {
   checkBiometricAvailability(): Promise<{
     available: boolean;
     enabled: boolean;
+    error?: string;
   }>;
 
   enableBiometricLogin(): Promise<void>;
@@ -187,10 +188,11 @@ export const AuthProvider = ({
     useCallback(async (): Promise<{
       available: boolean;
       enabled: boolean;
+      error?: string;
     }> => {
       try {
-        const available =
-          await biometricAuth.isBiometricAvailable();
+        const status = await biometricAuth.getBiometricStatus();
+        const available = status.isAvailable;
 
         let enabled = false;
 
@@ -205,6 +207,9 @@ export const AuthProvider = ({
         return {
           available,
           enabled,
+          ...(!available && status.reason
+            ? { error: status.reason }
+            : {}),
         };
       } catch (error) {
         console.error(
@@ -218,6 +223,10 @@ export const AuthProvider = ({
         return {
           available: false,
           enabled: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to check biometric availability.",
         };
       }
     }, []);

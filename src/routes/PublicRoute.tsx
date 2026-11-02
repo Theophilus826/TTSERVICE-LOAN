@@ -58,6 +58,12 @@ function PublicRoute() {
     isAuthenticated &&
     user
   ) {
+    // Login owns the post-authentication redirect so it can finish
+    // optional biometric enrollment before leaving the page.
+    if (location.pathname === "/login") {
+      return <Outlet />;
+    }
+
     const from =
       location.state?.from?.pathname ||
       "/dashboard";
@@ -90,4 +96,3 @@ function PublicRoute() {
 }
 
 export default PublicRoute;
-

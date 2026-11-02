@@ -1,6 +1,11 @@
 
 import { Capacitor } from "@capacitor/core";
 import { BiometricAuth } from "@aparajita/capacitor-biometric-auth";
+import {
+  BiometryErrorType,
+  BiometryType,
+  type CheckBiometryResult,
+} from "@aparajita/capacitor-biometric-auth";
 import { SecureStorage } from "@aparajita/capacitor-secure-storage";
 
 import authApi, { type AuthUser } from "./AuthService";
@@ -51,12 +56,24 @@ const authenticateFingerprint = async (): Promise<void> => {
 ========================================================= */
 
 const isBiometricAvailable = async (): Promise<boolean> => {
+  const status = await getBiometricStatus();
+  return status.isAvailable;
+};
+
+const getBiometricStatus = async (): Promise<CheckBiometryResult> => {
   if (!Capacitor.isNativePlatform()) {
-    return false;
+    return {
+      isAvailable: false,
+      strongBiometryIsAvailable: false,
+      biometryType: BiometryType.none,
+      biometryTypes: [],
+      deviceIsSecure: false,
+      reason: "Biometric login requires the installed mobile app.",
+      code: BiometryErrorType.biometryNotAvailable,
+    };
   }
 
-  const result = await BiometricAuth.checkBiometry();
-  return result.isAvailable;
+  return BiometricAuth.checkBiometry();
 };
 
 /* =========================================================
@@ -164,6 +181,7 @@ const disableBiometricLogin = async (): Promise<void> => {
 
 const biometricAuth = {
   isBiometricAvailable,
+  getBiometricStatus,
   isBiometricEnabled,
   enableBiometricLogin,
   loginWithBiometrics,

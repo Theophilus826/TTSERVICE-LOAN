@@ -27,6 +27,8 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [showBiometricSetup, setShowBiometricSetup] =
     useState(false);
+  const [biometricStatusMessage, setBiometricStatusMessage] =
+    useState("");
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -191,6 +193,7 @@ export default function Login() {
 
       const biometricStatus =
         await checkBiometricAvailability();
+      setBiometricStatusMessage(biometricStatus.error ?? "");
 
       if (
         biometricStatus.available &&
@@ -220,14 +223,18 @@ export default function Login() {
 
       if (!biometricStatus.available) {
         toast.info(
-          "Fingerprint login is unavailable. Use a supported mobile device with biometrics enrolled.",
+          biometricStatus.error ||
+            "Fingerprint login is unavailable. Enroll biometrics in your device settings.",
         );
         return;
       }
 
       if (!biometricStatus.enabled) {
+        if (isAuthenticated) {
+          setShowBiometricSetup(true);
+        }
         toast.info(
-          "Sign in with your PIN first, then enable fingerprint login.",
+          "Sign in with your PIN to enable fingerprint login.",
         );
         return;
       }
@@ -443,11 +450,12 @@ export default function Login() {
         </button>
 
         <p className="mt-2 text-center text-xs text-gray-500">
-          {!isBiometricAvailable
-            ? "Biometric authentication is not currently available on this device."
+          {biometricStatusMessage ||
+            (!isBiometricAvailable
+              ? "Biometric authentication is not currently available on this device."
             : !isBiometricEnabled
               ? "Sign in with your PIN first to enable fingerprint login."
-              : "Authenticate securely using your device biometrics."}
+              : "Authenticate securely using your device biometrics.")}
         </p>
 
         {/* FORGOT PIN */}

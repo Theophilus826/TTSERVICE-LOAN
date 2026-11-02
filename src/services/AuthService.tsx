@@ -1253,6 +1253,35 @@ const isSupport =
     );
   };
 
+  
+const restoreBiometricSession = async (
+  token: string,
+): Promise<AuthUser | null> => {
+  if (!token) {
+    throw new Error("Saved authentication token is missing.");
+  }
+
+  // Restore the token for the existing API interceptor.
+  localStorage.setItem(TOKEN_KEY, token);
+
+  try {
+    const currentUser = await getMe();
+
+    if (!currentUser) {
+      clearAuth();
+      throw new Error(
+        "Your saved session has expired. Please log in with your PIN.",
+      );
+    }
+
+    return currentUser;
+  } catch (error) {
+    clearAuth();
+    throw error;
+  }
+};
+
+
 /* =========================================================
    EXPORT AUTH API
 ========================================================= */
@@ -1285,7 +1314,12 @@ const authApi = {
   isRiskOfficer,
   isFinance,
   isSupport,
+  restoreBiometricSession,
+  saveAuth,
+  clearAuth,    
 };
+
+
 
 export default authApi;
 

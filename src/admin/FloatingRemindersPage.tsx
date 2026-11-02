@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import adminRepaymentApi, {
   FloatingReminder,
   FloatingReminderStatus,
@@ -11,11 +11,40 @@ import adminRepaymentApi, {
 // =========================================================
 
 const formatCurrency = (amount: number, currency = "NGN") => {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(amount || 0);
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const safeCurrency = currency || "NGN";
+
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: safeCurrency,
+      maximumFractionDigits: 2,
+    }).format(safeAmount);
+  } catch {
+    return `${safeCurrency} ${safeAmount.toLocaleString("en-NG", {
+      maximumFractionDigits: 2,
+    })}`;
+  }
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error !== "object" || error === null) return fallback;
+
+  const response = "response" in error ? error.response : undefined;
+  if (typeof response === "object" && response !== null && "data" in response) {
+    const data = response.data;
+    if (typeof data === "object" && data !== null && "message" in data) {
+      if (typeof data.message === "string" && data.message.trim()) {
+        return data.message;
+      }
+    }
+  }
+
+  return "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim()
+    ? error.message
+    : fallback;
 };
 
 const formatDate = (date?: string | null) => {
@@ -105,7 +134,9 @@ const FloatingRemindersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [error, setError] = useState("");
+  const [summaryError, setSummaryError] = useState("");
 
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<FloatingReminderStatus | "">("");
 
@@ -116,24 +147,45 @@ const FloatingRemindersPage: React.FC = () => {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // -------------------------------------------------------
-  // LOAD SUMMARY
-  // -------------------------------------------------------
-
-  const loadSummary = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
     setSummaryLoading(true);
+    setSummaryError("");
 
-    try {
-      const result =
-        await adminRepaymentApi.getFloatingReminderSummary();
+    const loadSummary = async () => {
+      try {
+        const result =
+          await adminRepaymentApi.getFloatingReminderSummary();
 
-      setSummary(result);
-    } catch (err) {
-      console.error("Failed to load reminder summary:", err);
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, []);
+        if (cancelled) return;
+        setSummary(result);
+      } catch (err) {
+        if (cancelled) return;
+
+        console.error("Failed to load reminder summary:", err);
+        setSummary(null);
+        setSummaryError(
+          getErrorMessage(err, "Unable to load reminder summary."),
+        );
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    };
+
+    void loadSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [searchInput]);
 
   // -------------------------------------------------------
   // LOAD REMINDERS
@@ -157,23 +209,28 @@ const FloatingRemindersPage: React.FC = () => {
 
         if (cancelled) return;
 
-        setReminders(result.reminders || []);
-        setTotalRecords(result.pagination?.total || 0);
-        setTotalPages(
-          Math.max(1, result.pagination?.totalPages || 1)
+        const nextTotalPages = Math.max(
+          1,
+          result.pagination?.totalPages ?? 1,
         );
-      } catch (err: any) {
+        setTotalRecords(result.pagination?.total ?? 0);
+        setTotalPages(nextTotalPages);
+
+        if (page > nextTotalPages) {
+          setPage(nextTotalPages);
+          return;
+        }
+
+        setReminders(result.reminders ?? []);
+      } catch (err: unknown) {
         if (cancelled) return;
 
         console.error("Failed to load floating reminders:", err);
 
-        setError(
-          err?.response?.data?.message ||
-            err?.message ||
-            "Unable to load floating reminders."
-        );
-
+        setError(getErrorMessage(err, "Unable to load floating reminders."));
         setReminders([]);
+        setTotalRecords(0);
+        setTotalPages(1);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -187,19 +244,11 @@ const FloatingRemindersPage: React.FC = () => {
   }, [search, status, page, limit, refreshKey]);
 
   // -------------------------------------------------------
-  // LOAD SUMMARY ON PAGE OPEN / REFRESH
-  // -------------------------------------------------------
-
-  useEffect(() => {
-    loadSummary();
-  }, [loadSummary, refreshKey]);
-
-  // -------------------------------------------------------
   // FILTER HANDLERS
   // -------------------------------------------------------
 
   const handleSearch = (value: string) => {
-    setSearch(value);
+    setSearchInput(value);
     setPage(1);
   };
 
@@ -210,6 +259,12 @@ const FloatingRemindersPage: React.FC = () => {
 
   const handleRefresh = () => {
     setRefreshKey((current) => current + 1);
+  };
+
+  const summaryValue = (value: number | undefined) => {
+    if (summaryLoading) return "...";
+    if (summaryError) return "—";
+    return value ?? 0;
   };
 
   // -------------------------------------------------------
@@ -259,13 +314,29 @@ const FloatingRemindersPage: React.FC = () => {
           </button>
         </div>
 
+        {summaryError && (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
+            <p className="font-semibold">Unable to load reminder summary</p>
+            <p className="mt-1">{summaryError}</p>
+            <button
+              onClick={handleRefresh}
+              className="mt-3 font-semibold underline"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
         {/* SUMMARY CARDS */}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
 
           <SummaryCard
             title="Total reminders"
-            value={summaryLoading ? "..." : summary?.total ?? 0}
+            value={summaryValue(summary?.total)}
             description="Registered reminder records"
             icon="📊"
             color="bg-blue-50"
@@ -273,7 +344,7 @@ const FloatingRemindersPage: React.FC = () => {
 
           <SummaryCard
             title="Enabled"
-            value={summaryLoading ? "..." : summary?.enabled ?? 0}
+            value={summaryValue(summary?.enabled)}
             description="Customers with reminders enabled"
             icon="🔔"
             color="bg-indigo-50"
@@ -281,7 +352,7 @@ const FloatingRemindersPage: React.FC = () => {
 
           <SummaryCard
             title="Active"
-            value={summaryLoading ? "..." : summary?.active ?? 0}
+            value={summaryValue(summary?.active)}
             description="Currently active reminders"
             icon="🟢"
             color="bg-green-50"
@@ -289,7 +360,7 @@ const FloatingRemindersPage: React.FC = () => {
 
           <SummaryCard
             title="Cooldown"
-            value={summaryLoading ? "..." : summary?.cooldown ?? 0}
+            value={summaryValue(summary?.cooldown)}
             description="Temporarily hidden reminders"
             icon="⏳"
             color="bg-amber-50"
@@ -297,7 +368,7 @@ const FloatingRemindersPage: React.FC = () => {
 
           <SummaryCard
             title="Errors"
-            value={summaryLoading ? "..." : summary?.errors ?? 0}
+            value={summaryValue(summary?.errors)}
             description="Reminders requiring attention"
             icon="⚠️"
             color="bg-red-50"
@@ -313,7 +384,7 @@ const FloatingRemindersPage: React.FC = () => {
               Disabled reminders
             </p>
             <h3 className="mt-2 text-xl font-bold text-gray-900">
-              {summaryLoading ? "..." : summary?.disabled ?? 0}
+              {summaryValue(summary?.disabled)}
             </h3>
           </div>
 
@@ -322,9 +393,7 @@ const FloatingRemindersPage: React.FC = () => {
               Permission denied
             </p>
             <h3 className="mt-2 text-xl font-bold text-orange-600">
-              {summaryLoading
-                ? "..."
-                : summary?.permissionDenied ?? 0}
+              {summaryValue(summary?.permissionDenied)}
             </h3>
           </div>
 
@@ -333,9 +402,7 @@ const FloatingRemindersPage: React.FC = () => {
               Total unpaid installments
             </p>
             <h3 className="mt-2 text-xl font-bold text-gray-900">
-              {summaryLoading
-                ? "..."
-                : summary?.unpaidInstallments ?? 0}
+              {summaryValue(summary?.unpaidInstallments)}
             </h3>
             <p className="mt-1 text-xs text-gray-500">
               Across registered reminder records
@@ -353,7 +420,9 @@ const FloatingRemindersPage: React.FC = () => {
           <h2 className="mt-2 text-2xl font-bold text-gray-900">
             {summaryLoading
               ? "Loading..."
-              : formatCurrency(summary?.unpaidAmount || 0)}
+              : summaryError
+              ? "Unavailable"
+              : formatCurrency(summary?.unpaidAmount ?? 0)}
           </h2>
         </div>
 
@@ -371,7 +440,9 @@ const FloatingRemindersPage: React.FC = () => {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  {totalRecords} reminder records found
+                  {loading
+                    ? "Loading reminder records..."
+                    : `${totalRecords} reminder records found`}
                 </p>
               </div>
 
@@ -382,7 +453,7 @@ const FloatingRemindersPage: React.FC = () => {
                 <input
                   type="search"
                   placeholder="Search name, email or phone..."
-                  value={search}
+                  value={searchInput}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:w-72"
                 />
@@ -456,7 +527,7 @@ const FloatingRemindersPage: React.FC = () => {
                     <th className="px-5 py-4">Unpaid installments</th>
                     <th className="px-5 py-4">Outstanding</th>
                     <th className="px-5 py-4">Last payment</th>
-                    <th className="px-5 py-4">Next reminder</th>
+                    <th className="px-5 py-4">Reminder timing</th>
                     <th className="px-5 py-4">Last error</th>
                   </tr>
                 </thead>
@@ -545,14 +616,17 @@ const FloatingRemindersPage: React.FC = () => {
                         {formatDate(reminder.lastPaymentAt)}
                       </td>
 
-                      {/* NEXT REMINDER */}
+                      {/* REMINDER TIMING */}
 
                       <td className="px-5 py-4 text-gray-600">
-                        {reminder.status === "cooldown"
-                          ? formatDate(reminder.cooldownUntil)
-                          : reminder.status === "active"
-                          ? "Active"
-                          : "—"}
+                        <div>
+                          Last shown: {formatDate(reminder.lastReminderAt)}
+                        </div>
+                        {reminder.status === "cooldown" && (
+                          <div className="mt-1 text-xs text-gray-500">
+                            Cooldown until: {formatDate(reminder.cooldownUntil)}
+                          </div>
+                        )}
                       </td>
 
                       {/* LAST ERROR */}

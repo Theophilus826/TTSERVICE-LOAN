@@ -34,6 +34,8 @@ import LoanOffers from "../pages/LoanOffers";
 import LoanOfferDetails from "../pages/LoanOfferDetails";
 import RepaymentAccount from "../pages/RepaymentAccount";
 import ChatUs from "../component/ChatUs";
+import Notifications from "../pages/Notifications";
+
 /* =========================================================
 CUSTOMER ACCOUNT / VERIFICATION
 ========================================================= */
@@ -178,7 +180,7 @@ PUBLIC ROUTES
       ================================================= */}
 
             <Route path="/profile" element={<Profile />} />
-
+            <Route path="/notifications" element={<Notifications />} />
             {/* =================================================
           UNIFIED CUSTOMER KYC ONBOARDING
           

@@ -8,6 +8,7 @@ import {
 import {
   Eye,
   EyeOff,
+  Fingerprint,
 } from "lucide-react";
 
 import {
@@ -20,14 +21,10 @@ import { toast } from "react-toastify";
 import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
-  const [identifier, setIdentifier] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [showPassword, setShowPassword] =
-    useState(false);
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,39 +35,26 @@ export default function Login() {
     initializing,
     isAuthenticated,
     login,
+
+    isBiometricAvailable,
+    isBiometricEnabled,
+    biometricLoading,
+    loginWithBiometrics,
+    checkBiometricAvailability,
   } = useAuth();
 
-  const [submitting, setSubmitting] =
-    useState(false);
-
-  // =========================================================
-  // REDIRECT AFTER AUTHENTICATION
-  // =========================================================
+  /* =========================================================
+     REDIRECT AFTER AUTHENTICATION
+  ========================================================= */
 
   useEffect(() => {
-    if (!isAuthenticated || !user) {
-      return;
-    }
+    if (!isAuthenticated || !user) return;
 
-    const from =
-      location.state?.from?.pathname;
-
-    /*
-     * Only administrator roles can access
-     * the /admin route tree.
-     */
+    const from = location.state?.from?.pathname;
 
     const isAdministrator =
       user.role === "admin" ||
       user.role === "super_admin";
-
-    /*
-     * Preserve the original protected
-     * destination when it is safe to do so.
-     *
-     * Do not redirect customers to
-     * administrative routes.
-     */
 
     const requestedPath =
       typeof from === "string" &&
@@ -90,9 +74,7 @@ export default function Login() {
           ? "/admin"
           : "/dashboard";
 
-    navigate(destination, {
-      replace: true,
-    });
+    navigate(destination, { replace: true });
   }, [
     isAuthenticated,
     user,
@@ -100,57 +82,80 @@ export default function Login() {
     navigate,
   ]);
 
-  // =========================================================
-  // PIN CHANGE
-  // =========================================================
+  /* =========================================================
+     CHECK BIOMETRIC AVAILABILITY
+  ========================================================= */
 
-  const handlePinChange = (
-    value: string,
-  ) => {
-    /*
-     * Allow numbers only.
-     *
-     * Maximum of 4 digits.
-     */
+  useEffect(() => {
+    void checkBiometricAvailability();
+  }, [checkBiometricAvailability]);
 
-    const numericPin =
-      value
-        .replace(/\D/g, "")
-        .slice(0, 4);
+  /* =========================================================
+     PIN INPUT
+  ========================================================= */
+
+  const handlePinChange = (value: string): void => {
+    const numericPin = value
+      .replace(/\D/g, "")
+      .slice(0, 4);
 
     setPassword(numericPin);
   };
 
-  // =========================================================
-  // SUBMIT
-  // =========================================================
+  /* =========================================================
+     ERROR HANDLING
+  ========================================================= */
+
+  const getErrorMessage = (error: unknown): string => {
+    if (typeof error === "object" && error !== null) {
+      const axiosError = error as {
+        response?: {
+          data?: {
+            message?: unknown;
+            error?: unknown;
+          };
+        };
+        message?: unknown;
+      };
+
+      const responseMessage =
+        axiosError.response?.data?.message;
+
+      const responseError =
+        axiosError.response?.data?.error;
+
+      if (typeof responseMessage === "string") {
+        return responseMessage;
+      }
+
+      if (typeof responseError === "string") {
+        return responseError;
+      }
+
+      if (typeof axiosError.message === "string") {
+        return axiosError.message;
+      }
+    }
+
+    return "Authentication failed. Please try again.";
+  };
+
+  /* =========================================================
+     NORMAL PIN LOGIN
+  ========================================================= */
 
   const handleSubmit = async (
     e: FormEvent<HTMLFormElement>,
-  ) => {
+  ): Promise<void> => {
     e.preventDefault();
 
-    if (submitting) {
-      return;
-    }
+    if (submitting || loading) return;
 
-    const cleanIdentifier =
-      identifier.trim();
+    const cleanIdentifier = identifier.trim();
 
     if (!cleanIdentifier) {
       toast.error(
         "Please enter your email or phone number.",
-      );
-      return;
-    }
-
-    // -------------------------------------------------------
-    // PIN VALIDATION
-    // -------------------------------------------------------
-
-    if (!password) {
-      toast.error(
-        "Please enter your 4-digit PIN.",
       );
       return;
     }
@@ -162,81 +167,43 @@ export default function Login() {
       return;
     }
 
-    // -------------------------------------------------------
-    // LOGIN
-    // -------------------------------------------------------
-
     setSubmitting(true);
 
     try {
       await login({
-        identifier:
-          cleanIdentifier,
-
-        /*
-         * The backend still expects
-         * the credential as "password".
-         *
-         * The value is a 4-digit PIN.
-         */
+        identifier: cleanIdentifier,
         password,
       });
 
-      toast.success(
-        "Login successful.",
-      );
+      toast.success("Login successful.");
     } catch (error: unknown) {
-      let message =
-        "Login failed. Please check your credentials and try again.";
-
-      if (
-        typeof error === "object" &&
-        error !== null
-      ) {
-        const axiosError =
-          error as {
-            response?: {
-              data?: {
-                message?: unknown;
-                error?: unknown;
-              };
-            };
-            message?: unknown;
-          };
-
-        const responseMessage =
-          axiosError.response?.data?.message;
-
-        const responseError =
-          axiosError.response?.data?.error;
-
-        if (
-          typeof responseMessage ===
-          "string"
-        ) {
-          message = responseMessage;
-        } else if (
-          typeof responseError ===
-          "string"
-        ) {
-          message = responseError;
-        } else if (
-          typeof axiosError.message ===
-          "string"
-        ) {
-          message = axiosError.message;
-        }
-      }
-
-      toast.error(message);
+      toast.error(getErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
 
-  // =========================================================
-  // INITIAL SESSION LOADING
-  // =========================================================
+  /* =========================================================
+     FINGERPRINT LOGIN
+  ========================================================= */
+
+  const handleBiometricLogin = async (): Promise<void> => {
+    if (biometricLoading || loading || submitting) {
+      return;
+    }
+
+    try {
+      await loginWithBiometrics();
+
+      toast.success("Fingerprint authentication successful.");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error));
+    }
+  };
+
+  /* =========================================================
+     INITIAL SESSION LOADING
+  ========================================================= */
 
   if (initializing) {
     return (
@@ -256,13 +223,14 @@ export default function Login() {
     );
   }
 
-  // =========================================================
-  // UI
-  // =========================================================
+  /* =========================================================
+     UI
+  ========================================================= */
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-8">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
+
         {/* BRAND */}
 
         <h1 className="mb-2 text-center text-3xl font-bold text-orange-500">
@@ -273,12 +241,13 @@ export default function Login() {
           Welcome back
         </p>
 
-        {/* FORM */}
+        {/* LOGIN FORM */}
 
         <form
           onSubmit={handleSubmit}
           className="space-y-5"
         >
+
           {/* EMAIL / PHONE */}
 
           <div>
@@ -296,15 +265,13 @@ export default function Login() {
               placeholder="Enter phone number or email"
               value={identifier}
               onChange={(e) =>
-                setIdentifier(
-                  e.target.value,
-                )
+                setIdentifier(e.target.value)
               }
               className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
-              disabled={submitting}
+              disabled={submitting || loading}
               required
             />
           </div>
@@ -323,23 +290,17 @@ export default function Login() {
               <input
                 id="password"
                 name="password"
-                type={
-                  showPassword
-                    ? "text"
-                    : "password"
-                }
+                type={showPassword ? "text" : "password"}
                 inputMode="numeric"
                 maxLength={4}
                 pattern="[0-9]{4}"
                 placeholder="Enter 4-digit PIN"
                 value={password}
                 onChange={(e) =>
-                  handlePinChange(
-                    e.target.value,
-                  )
+                  handlePinChange(e.target.value)
                 }
                 autoComplete="current-password"
-                disabled={submitting}
+                disabled={submitting || loading}
                 required
                 className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 text-center tracking-[0.4em] outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
               />
@@ -347,18 +308,13 @@ export default function Login() {
               <button
                 type="button"
                 aria-label={
-                  showPassword
-                    ? "Hide PIN"
-                    : "Show PIN"
+                  showPassword ? "Hide PIN" : "Show PIN"
                 }
                 onClick={() =>
-                  setShowPassword(
-                    (previous) =>
-                      !previous,
-                  )
+                  setShowPassword((previous) => !previous)
                 }
-                disabled={submitting}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={submitting || loading}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
               >
                 {showPassword ? (
                   <EyeOff size={20} />
@@ -373,33 +329,72 @@ export default function Login() {
             </p>
           </div>
 
-          {/* LOGIN */}
+          {/* NORMAL LOGIN BUTTON */}
 
           <button
             type="submit"
             disabled={
               submitting ||
+              loading ||
+              biometricLoading ||
               password.length !== 4
             }
             className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
-            {submitting
+            {submitting || loading
               ? "Signing in..."
               : "Login"}
           </button>
         </form>
 
+        {/* DIVIDER AND FINGERPRINT */}
+
+        {isBiometricAvailable && isBiometricEnabled && (
+          <>
+            <div className="my-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-gray-200" />
+
+              <span className="text-xs text-gray-400">
+                OR
+              </span>
+
+              <div className="h-px flex-1 bg-gray-200" />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleBiometricLogin}
+              disabled={
+                biometricLoading ||
+                loading ||
+                submitting
+              }
+              className="flex w-full items-center justify-center gap-3 rounded-xl border-2 border-orange-200 bg-orange-50 py-4 font-semibold text-orange-600 transition hover:border-orange-400 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {biometricLoading ? (
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
+              ) : (
+                <Fingerprint size={27} />
+              )}
+
+              {biometricLoading
+                ? "Verifying fingerprint..."
+                : "Login with Fingerprint"}
+            </button>
+
+            <p className="mt-2 text-center text-xs text-gray-500">
+              Authenticate securely using your device biometrics.
+            </p>
+          </>
+        )}
+
         {/* FORGOT PIN */}
 
         <button
           type="button"
-          onClick={() =>
-            navigate(
-              "/resetpassword",
-            )
-          }
-          disabled={submitting}
-          className="mt-4 w-full text-center text-sm text-orange-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => navigate("/resetpassword")}
+          disabled={submitting || loading || biometricLoading}
+          className="mt-5 w-full text-center text-sm text-orange-500 hover:underline disabled:opacity-50"
         >
           Forgot PIN?
         </button>
@@ -408,19 +403,18 @@ export default function Login() {
 
         <p className="mt-6 text-center text-sm text-gray-600">
           Don't have an account?{" "}
+
           <button
             type="button"
-            onClick={() =>
-              navigate("/register")
-            }
-            disabled={submitting}
-            className="font-semibold text-orange-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => navigate("/register")}
+            disabled={submitting || loading || biometricLoading}
+            className="font-semibold text-orange-500 hover:underline disabled:opacity-50"
           >
             Register
           </button>
         </p>
+
       </div>
     </div>
   );
 }
-

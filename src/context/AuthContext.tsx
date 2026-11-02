@@ -67,7 +67,10 @@ export interface AuthContextValue {
   ): Promise<string>;
 
   // Biometric functions
-  checkBiometricAvailability(): Promise<void>;
+  checkBiometricAvailability(): Promise<{
+    available: boolean;
+    enabled: boolean;
+  }>;
 
   enableBiometricLogin(): Promise<void>;
 
@@ -182,7 +185,10 @@ export const AuthProvider = ({
   ======================================================= */
 
   const checkBiometricAvailability =
-    useCallback(async (): Promise<void> => {
+    useCallback(async (): Promise<{
+      available: boolean;
+      enabled: boolean;
+    }> => {
       try {
         const available =
           await biometricAuth.isBiometricAvailable();
@@ -193,6 +199,7 @@ export const AuthProvider = ({
 
         setIsBiometricAvailable(available);
         setIsBiometricEnabled(enabled);
+        return { available, enabled };
       } catch (error) {
         console.error(
           "Biometric availability check failed:",
@@ -201,6 +208,7 @@ export const AuthProvider = ({
 
         setIsBiometricAvailable(false);
         setIsBiometricEnabled(false);
+        return { available: false, enabled: false };
       }
     }, []);
 

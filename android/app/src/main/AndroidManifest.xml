@@ -1,5 +1,3 @@
-
-<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Network access -->
@@ -9,6 +7,8 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- Android notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -32,7 +32,7 @@
 
         </service>
 
-        <!-- Receiver for scheduled 24-hour reminder rechecks -->
+        <!-- Scheduled reminder receiver -->
         <receiver
             android:name=".FloatingReminderReceiver"
             android:enabled="true"
@@ -64,6 +64,7 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
+
         </provider>
 
         <!-- Loan home-screen widget -->
@@ -78,7 +79,9 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/loan_widget_info" />
+
         </receiver>
 
     </application>
+
 </manifest>

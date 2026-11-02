@@ -10,6 +10,8 @@ import {
 
 import API from "../services/Api";
 import type { AppNotification } from "../services/NotificationService";
+import { useAuth } from "./AuthContext";
+import { initializeNativePushNotifications } from "../services/NativePushNotifications";
 
 interface NotificationContextValue {
   notifications: AppNotification[];
@@ -30,7 +32,7 @@ const NotificationContext =
 const getNotificationStreamUrl = (): string => {
   const baseUrl =
     import.meta.env.VITE_API_URL ||
-    "http://localhost:5000/api";
+    "https://tofads-loan.onrender.com/api";
 
   return `${baseUrl.replace(/\/+$/, "")}/notifications/stream`;
 };
@@ -42,6 +44,7 @@ interface NotificationProviderProps {
 export function NotificationProvider({
   children,
 }: NotificationProviderProps) {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<
     AppNotification[]
   >([]);
@@ -55,6 +58,12 @@ export function NotificationProvider({
   useEffect(() => {
     notificationsRef.current = notifications;
   }, [notifications]);
+
+  useEffect(() => {
+    if (user?._id) {
+      void initializeNativePushNotifications();
+    }
+  }, [user?._id]);
 
   const refreshNotifications = useCallback(async () => {
     if (refreshInProgressRef.current) return;

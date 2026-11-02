@@ -17,6 +17,7 @@ interface LoanWidgetPlugin {
     message: string;
     paymentDue: boolean;
     floatingReminderEnabled: boolean;
+    unpaidInstallmentIds: string[];
   }): Promise<{ success: boolean }>;
 
   clearData(): Promise<{ success: boolean }>;
@@ -67,7 +68,9 @@ const getInstallmentAmount = (
 
   const total =
     installment.totalAmount ?? installment.total ?? installment.amount;
-  const paid = installment.paidAmount ?? installment.paid ?? 0;
+
+  const paid =
+    installment.paidAmount ?? installment.paid ?? 0;
 
   if (typeof total !== "number") return 0;
 
@@ -82,6 +85,42 @@ const getInstallmentDate = (
   installment.dueAt ??
   installment.finalDueDate ??
   schedule.finalDueDate;
+
+/**
+ * Get stable IDs for all currently unpaid installments.
+ * These IDs allow Android to detect when an installment
+ * previously unpaid has become paid.
+ */
+const getUnpaidInstallmentIds = (
+  schedules: RepaymentSchedule[],
+): string[] => {
+  const ids = schedules.flatMap((schedule) =>
+    (schedule.installments ?? [])
+      .filter((installment) => {
+        const status = String(installment.status ?? "").toLowerCase();
+
+        return (
+          status !== "paid" &&
+          status !== "waived" &&
+          getInstallmentAmount(installment) > 0
+        );
+      })
+      .map((installment) => {
+        const item = installment as RepaymentInstallment & {
+          _id?: string;
+          id?: string;
+          installmentId?: string;
+        };
+
+        return String(
+          item._id ?? item.id ?? item.installmentId ?? "",
+        );
+      })
+      .filter(Boolean),
+  );
+
+  return [...new Set(ids)];
+};
 
 const getNextInstallment = (schedules: RepaymentSchedule[]) => {
   const candidates = schedules.flatMap((schedule) =>
@@ -117,9 +156,8 @@ const getNextInstallment = (schedules: RepaymentSchedule[]) => {
 };
 
 /**
- * Sync the existing home-screen widget and the floating reminder data.
- * Floating reminders require the admin switch, customer consent,
- * an unpaid installment, and Android overlay permission.
+ * Sync the home-screen widget and floating reminder data.
+ * Android handles payment-change detection and the 24-hour cooldown.
  */
 export async function syncLoanWidget(): Promise<void> {
   if (!isNative()) return;
@@ -140,6 +178,9 @@ export async function syncLoanWidget(): Promise<void> {
     const schedules = Array.isArray(scheduleResponse.data)
       ? scheduleResponse.data
       : [];
+
+    const unpaidInstallmentIds =
+      getUnpaidInstallmentIds(schedules);
 
     const [accountResult, settingsResult] =
       await Promise.allSettled([
@@ -202,12 +243,13 @@ export async function syncLoanWidget(): Promise<void> {
       message:
         adminMessage?.trim() ||
         "Check your next loan installment and repayment details.",
-      paymentDue: Boolean(next),
+      paymentDue: unpaidInstallmentIds.length > 0,
       floatingReminderEnabled: adminFloatingReminderEnabled,
+      unpaidInstallmentIds,
     });
 
     console.log("[LoanWidget] Sync completed", {
-      paymentDue: Boolean(next),
+      unpaidInstallments: unpaidInstallmentIds.length,
       floatingReminderEnabled: adminFloatingReminderEnabled,
     });
   } catch (error) {
@@ -216,9 +258,6 @@ export async function syncLoanWidget(): Promise<void> {
   }
 }
 
-/**
- * Read the saved reminder decision for this specific customer.
- */
 export async function getFloatingReminderConsentStatus(
   userId: string,
 ): Promise<{
@@ -239,9 +278,6 @@ export async function getFloatingReminderConsentStatus(
   });
 }
 
-/**
- * Save this customer's opt-in or opt-out decision.
- */
 export async function setFloatingReminderConsent(
   userId: string,
   enabled: boolean,
@@ -258,9 +294,6 @@ export async function setFloatingReminderConsent(
   }
 }
 
-/**
- * Check Android's actual overlay permission.
- */
 export async function checkFloatingOverlayPermission(): Promise<boolean> {
   if (!isNative()) return false;
 
@@ -270,10 +303,6 @@ export async function checkFloatingOverlayPermission(): Promise<boolean> {
   return result.granted;
 }
 
-/**
- * Open Android overlay settings only when permission is missing.
- * Permission must be checked again after the user returns.
- */
 export async function requestFloatingOverlayPermission(): Promise<void> {
   if (!isNative()) return;
 
@@ -285,19 +314,12 @@ export async function requestFloatingOverlayPermission(): Promise<void> {
   }
 }
 
-/**
- * Clear personal payment details on logout.
- * Native clearData must preserve the separate consent preferences.
- */
 export async function clearLoanWidget(): Promise<void> {
   if (!isNative()) return;
 
   await NativeLoanWidget.clearData();
 }
 
-/**
- * Explicitly stop the floating reminder service.
- */
 export async function stopFloatingReminder(): Promise<void> {
   if (!isNative()) return;
 

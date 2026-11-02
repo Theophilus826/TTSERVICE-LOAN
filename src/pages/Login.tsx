@@ -214,21 +214,24 @@ export default function Login() {
       return;
     }
 
-    if (!isBiometricAvailable) {
-      toast.info(
-        "Biometric authentication is unavailable on this device.",
-      );
-      return;
-    }
-
-    if (!isBiometricEnabled) {
-      toast.info(
-        "Please sign in with your PIN first to enable fingerprint login.",
-      );
-      return;
-    }
-
     try {
+      const biometricStatus =
+        await checkBiometricAvailability();
+
+      if (!biometricStatus.available) {
+        toast.info(
+          "Fingerprint login is unavailable. Use a supported mobile device with biometrics enrolled.",
+        );
+        return;
+      }
+
+      if (!biometricStatus.enabled) {
+        toast.info(
+          "Sign in with your PIN first, then enable fingerprint login.",
+        );
+        return;
+      }
+
       await loginWithBiometrics();
 
       toast.success(

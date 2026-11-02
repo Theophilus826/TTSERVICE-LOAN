@@ -55,13 +55,8 @@ const isBiometricAvailable = async (): Promise<boolean> => {
     return false;
   }
 
-  try {
-    const result = await BiometricAuth.checkBiometry();
-
-    return result.isAvailable;
-  } catch {
-    return false;
-  }
+  const result = await BiometricAuth.checkBiometry();
+  return result.isAvailable;
 };
 
 /* =========================================================
@@ -73,18 +68,14 @@ const isBiometricEnabled = async (): Promise<boolean> => {
     return false;
   }
 
-  try {
-    const enabled = await SecureStorage.get(ENABLED_KEY);
-    const token = await SecureStorage.get(TOKEN_KEY);
+  const enabled = await SecureStorage.get(ENABLED_KEY);
+  const token = await SecureStorage.get(TOKEN_KEY);
 
-    return (
-      enabled === true &&
-      typeof token === "string" &&
-      token.length > 0
-    );
-  } catch {
-    return false;
-  }
+  return (
+    enabled === true &&
+    typeof token === "string" &&
+    token.length > 0
+  );
 };
 
 /* =========================================================
@@ -143,6 +134,11 @@ const loginWithBiometrics = async (): Promise<AuthUser> => {
     throw new Error(
       "Your saved session is invalid. Please log in with your PIN.",
     );
+  }
+
+  const currentToken = authApi.getToken();
+  if (currentToken && currentToken !== token) {
+    await SecureStorage.set(TOKEN_KEY, currentToken);
   }
 
   return authenticatedUser;

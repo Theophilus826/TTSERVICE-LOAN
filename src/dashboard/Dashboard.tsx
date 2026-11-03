@@ -1,4 +1,3 @@
-
 import {
   ArrowRight,
   CheckCircle2,
@@ -158,9 +157,9 @@ function formatCurrency(
       maximumFractionDigits: 2,
     }).format(Number.isFinite(value) ? value : 0);
   } catch {
-    return `${code} ${
-      (Number.isFinite(value) ? value : 0).toLocaleString("en-NG")
-    }`;
+    return `${code} ${(Number.isFinite(value) ? value : 0).toLocaleString(
+      "en-NG",
+    )}`;
   }
 }
 
@@ -178,9 +177,7 @@ function formatDate(value?: string | null): string {
   }).format(date);
 }
 
-function getProfilePayload(
-  response: unknown,
-): DashboardProfilePayload | null {
+function getProfilePayload(response: unknown): DashboardProfilePayload | null {
   const result = response as Record<string, any> | null;
 
   if (!result || typeof result !== "object") return null;
@@ -377,8 +374,7 @@ export default function Dashboard() {
     profileData?.loanSummary?.activeApplication ?? null;
 
   const profileApplicationStatus = normalizeStatus(
-    profileApplication?.status ||
-      profileData?.loanSummary?.applicationStatus,
+    profileApplication?.status || profileData?.loanSummary?.applicationStatus,
   );
 
   const onboardingApplicationStatus = normalizeStatus(
@@ -448,9 +444,7 @@ export default function Dashboard() {
 
   // Prevent a stale backend BANK nextStep from blocking a verified user.
   const effectiveNextStep: OnboardingStep | undefined =
-    kycComplete && status?.nextStep === "BANK"
-      ? "LOAN"
-      : status?.nextStep;
+    kycComplete && status?.nextStep === "BANK" ? "LOAN" : status?.nextStep;
 
   const kycStepLabel = kycComplete
     ? "Verified"
@@ -510,8 +504,7 @@ export default function Dashboard() {
   const hasCurrentApplication = Boolean(
     (status?.loan?.exists &&
       !isTerminalApplication(effectiveApplicationStatus)) ||
-      (profileApplication &&
-        !isTerminalApplication(profileApplication.status)),
+    (profileApplication && !isTerminalApplication(profileApplication.status)),
   );
 
   const loanCompleted =
@@ -563,8 +556,7 @@ export default function Dashboard() {
 
   const repaymentStatus = status?.repayment?.status ?? null;
 
-  const repaymentScheduleId =
-    status?.repayment?.repaymentScheduleId ?? null;
+  const repaymentScheduleId = status?.repayment?.repaymentScheduleId ?? null;
 
   const repaymentActive =
     !loanCompleted &&
@@ -573,9 +565,7 @@ export default function Dashboard() {
       hasActiveLoan);
 
   const displayedApplicationStatus =
-    effectiveApplicationStatus ||
-    normalizeStatus(status?.currentStatus) ||
-    "";
+    effectiveApplicationStatus || normalizeStatus(status?.currentStatus) || "";
 
   const repaymentStatusLabel = repaymentStatus
     ? formatStatus(repaymentStatus)
@@ -589,8 +579,7 @@ export default function Dashboard() {
 
   const summary = loanDashboard?.summary;
 
-  const totalBorrowed =
-    summary?.totalBorrowed ?? summary?.totalPrincipal ?? 0;
+  const totalBorrowed = summary?.totalBorrowed ?? summary?.totalPrincipal ?? 0;
 
   const totalPaid = summary?.totalPaid ?? 0;
 
@@ -689,8 +678,7 @@ export default function Dashboard() {
     }
 
     if (mandateActive) {
-      const offerId =
-        status?.mandate?.offerId || status?.loanOffer?.offerId;
+      const offerId = status?.mandate?.offerId || status?.loanOffer?.offerId;
 
       navigate(
         offerId
@@ -733,8 +721,7 @@ export default function Dashboard() {
         navigate("/loan-offers");
         break;
       case "MANDATE": {
-        const offerId =
-          status?.loanOffer?.offerId || status?.mandate?.offerId;
+        const offerId = status?.loanOffer?.offerId || status?.mandate?.offerId;
 
         navigate(
           offerId
@@ -872,10 +859,7 @@ export default function Dashboard() {
             onClick={() => void loadDashboard()}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
           >
-            <RefreshCw
-              size={16}
-              className={refreshing ? "animate-spin" : ""}
-            />
+            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
             {refreshing ? "Refreshing..." : "Refresh status"}
           </button>
         </section>
@@ -937,15 +921,9 @@ export default function Dashboard() {
                 <h3 className="mt-2 text-2xl font-bold">{applicationTitle}</h3>
               </div>
               {loanCompleted ? (
-                <CheckCircle2
-                  size={34}
-                  className="shrink-0 text-emerald-300"
-                />
+                <CheckCircle2 size={34} className="shrink-0 text-emerald-300" />
               ) : (
-                <WalletCards
-                  size={32}
-                  className="shrink-0 text-slate-400"
-                />
+                <WalletCards size={32} className="shrink-0 text-slate-400" />
               )}
             </div>
 
@@ -1102,6 +1080,18 @@ export default function Dashboard() {
             onView={() => navigate("/my-loans")}
           />
         )}
+
+        <section className="mb-6">
+          <button
+            type="button"
+            onClick={() => navigate("/test")}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            <Sparkles size={18} />
+            Test Floating Reminder
+            <ArrowRight size={17} />
+          </button>
+        </section>
       </main>
     </div>
   );
@@ -1312,11 +1302,9 @@ function LoanStatusBadge({ status }: { status: string }) {
 
   const isPositive = ["active", "disbursed", "repaying"].includes(normalized);
 
-  const isWarning = [
-    "overdue",
-    "pending_disbursement",
-    "disbursing",
-  ].includes(normalized);
+  const isWarning = ["overdue", "pending_disbursement", "disbursing"].includes(
+    normalized,
+  );
 
   const className = isPositive
     ? "bg-green-100 text-green-700"

@@ -48,6 +48,7 @@ import PersonalStep from "../component/PersonalStep";
 import BvnStep from "../component/BvnStep";
 // import FaceVerificationStep from "../component/FaceVerificationStep";
 import FaceVerificationPage from "../pages/FaceVerificationPage";
+import test from "../pages/test"; 
 
 /* =========================================================
 MANDATES
@@ -208,6 +209,7 @@ PUBLIC ROUTES
                 path="/face-verification"
                 element={<FaceVerificationPage />}
               />
+              <Route path="/test" element={<test />} /> 
             </Route>
 
             {/* =================================================

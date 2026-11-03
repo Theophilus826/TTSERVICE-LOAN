@@ -40,14 +40,27 @@ interface LoanWidgetPlugin {
   }): Promise<{ success: boolean }>;
 
   stopFloatingReminder(): Promise<{ success: boolean }>;
+
+  testFloatingReminder(options: {
+    userId: string;
+  }): Promise<{ success: boolean }>;
+
+  diagnoseFloatingReminder(): Promise<{
+    success: boolean;
+    [key: string]: any;
+  }>;
 }
 
 const NativeLoanWidget =
   registerPlugin<LoanWidgetPlugin>("LoanWidget");
 
-const isNative = (): boolean => Capacitor.isNativePlatform();
+const isNative = (): boolean =>
+  Capacitor.isNativePlatform();
 
-const formatMoney = (amount: number, currency: string): string => {
+const formatMoney = (
+  amount: number,
+  currency: string,
+): string => {
   try {
     return new Intl.NumberFormat("en-NG", {
       style: "currency",
@@ -67,10 +80,14 @@ const getInstallmentAmount = (
   }
 
   const total =
-    installment.totalAmount ?? installment.total ?? installment.amount;
+    installment.totalAmount ??
+    installment.total ??
+    installment.amount;
 
   const paid =
-    installment.paidAmount ?? installment.paid ?? 0;
+    installment.paidAmount ??
+    installment.paid ??
+    0;
 
   if (typeof total !== "number") return 0;
 
@@ -86,18 +103,15 @@ const getInstallmentDate = (
   installment.finalDueDate ??
   schedule.finalDueDate;
 
-/**
- * Get stable IDs for all currently unpaid installments.
- * These IDs allow Android to detect when an installment
- * previously unpaid has become paid.
- */
 const getUnpaidInstallmentIds = (
   schedules: RepaymentSchedule[],
 ): string[] => {
   const ids = schedules.flatMap((schedule) =>
     (schedule.installments ?? [])
       .filter((installment) => {
-        const status = String(installment.status ?? "").toLowerCase();
+        const status = String(
+          installment.status ?? ""
+        ).toLowerCase();
 
         return (
           status !== "paid" &&
@@ -113,28 +127,35 @@ const getUnpaidInstallmentIds = (
         };
 
         return String(
-          item._id ?? item.id ?? item.installmentId ?? "",
+          item._id ??
+          item.id ??
+          item.installmentId ??
+          ""
         );
       })
-      .filter(Boolean),
+      .filter(Boolean)
   );
 
   return [...new Set(ids)];
 };
 
-const getNextInstallment = (schedules: RepaymentSchedule[]) => {
+const getNextInstallment = (
+  schedules: RepaymentSchedule[],
+) => {
   const candidates = schedules.flatMap((schedule) =>
     (schedule.installments ?? []).map((installment) => ({
       schedule,
       installment,
       amount: getInstallmentAmount(installment),
       date: getInstallmentDate(installment, schedule),
-    })),
+    }))
   );
 
   return candidates
     .filter(({ installment, amount }) => {
-      const status = (installment.status ?? "").toLowerCase();
+      const status = String(
+        installment.status ?? ""
+      ).toLowerCase();
 
       return (
         status !== "paid" &&
@@ -156,59 +177,90 @@ const getNextInstallment = (schedules: RepaymentSchedule[]) => {
 };
 
 /**
- * Sync the home-screen widget and floating reminder data.
- * Android handles payment-change detection and the 24-hour cooldown.
+ * Synchronize floating reminder and home-screen widget.
+ * Works for every authenticated user, regardless of role.
  */
 export async function syncLoanWidget(): Promise<void> {
   if (!isNative()) return;
 
   const currentUser = authApi.getUser();
 
-  if (!currentUser?._id || currentUser.role !== "customer") {
+  if (!currentUser?._id) {
+    console.log(
+      "[LoanWidget] No authenticated user. Clearing widget data."
+    );
+
     await NativeLoanWidget.clearData();
     return;
   }
 
-  console.log("[LoanWidget] Sync started");
+  console.log("[LoanWidget] Sync started", {
+    userId: currentUser._id,
+  });
 
   try {
-    const scheduleResponse =
-      await repaymentApi.getMyRepaymentSchedules();
+    const [
+      scheduleResult,
+      accountResult,
+      settingsResult,
+    ] = await Promise.allSettled([
+      repaymentApi.getMyRepaymentSchedules(),
 
-    const schedules = Array.isArray(scheduleResponse.data)
-      ? scheduleResponse.data
-      : [];
+      repaymentApi.getRepaymentAccount(),
 
-    const unpaidInstallmentIds =
-      getUnpaidInstallmentIds(schedules);
+      API.get<{
+        success?: boolean;
+        data?: {
+          widgetMessage?: string;
+          floatingReminderEnabled?: boolean;
+        };
+      }>("/settings/widget"),
+    ]);
 
-    const [accountResult, settingsResult] =
-      await Promise.allSettled([
-        repaymentApi.getRepaymentAccount(),
-        API.get<{
-          success?: boolean;
-          data?: {
-            widgetMessage?: string;
-            floatingReminderEnabled?: boolean;
-          };
-        }>("/settings/widget"),
-      ]);
+    const schedules =
+      scheduleResult.status === "fulfilled" &&
+      Array.isArray(scheduleResult.value.data)
+        ? scheduleResult.value.data
+        : [];
+
+    if (scheduleResult.status === "rejected") {
+      console.warn(
+        "[LoanWidget] Repayment schedules unavailable:",
+        scheduleResult.reason
+      );
+    }
 
     const account =
       accountResult.status === "fulfilled"
         ? accountResult.value.data
         : null;
 
-    const adminMessage =
-      settingsResult.status === "fulfilled"
-        ? settingsResult.value.data?.data?.widgetMessage
-        : undefined;
+    if (accountResult.status === "rejected") {
+      console.warn(
+        "[LoanWidget] Repayment account unavailable:",
+        accountResult.reason
+      );
+    }
 
-    const adminFloatingReminderEnabled =
+    const settings =
       settingsResult.status === "fulfilled"
         ? settingsResult.value.data?.data
-            ?.floatingReminderEnabled === true
-        : false;
+        : undefined;
+
+    if (settingsResult.status === "rejected") {
+      console.error(
+        "[LoanWidget] Settings request failed:",
+        settingsResult.reason
+      );
+    }
+
+    const adminMessage = settings?.widgetMessage;
+
+    const adminFloatingReminderEnabled =
+      settings?.floatingReminderEnabled === true;
+
+    const unpaidInstallmentIds =
+      getUnpaidInstallmentIds(schedules);
 
     const next = getNextInstallment(schedules);
 
@@ -218,7 +270,7 @@ export async function syncLoanWidget(): Promise<void> {
     if (next) {
       amount = formatMoney(
         next.amount,
-        next.schedule.currency || "NGN",
+        next.schedule.currency || "NGN"
       );
 
       if (next.date) {
@@ -234,30 +286,46 @@ export async function syncLoanWidget(): Promise<void> {
       }
     }
 
-    await NativeLoanWidget.updateData({
+    const result = await NativeLoanWidget.updateData({
       userId: currentUser._id,
       amount,
       dueDate,
       accountNumber: account?.accountNumber ?? "",
       bankName: account?.bankName ?? "",
+
       message:
         adminMessage?.trim() ||
         "Check your next loan installment and repayment details.",
+
       paymentDue: unpaidInstallmentIds.length > 0,
-      floatingReminderEnabled: adminFloatingReminderEnabled,
+
+      floatingReminderEnabled:
+        adminFloatingReminderEnabled,
+
       unpaidInstallmentIds,
     });
 
     console.log("[LoanWidget] Sync completed", {
+      userId: currentUser._id,
+      success: result.success,
       unpaidInstallments: unpaidInstallmentIds.length,
-      floatingReminderEnabled: adminFloatingReminderEnabled,
+      floatingReminderEnabled:
+        adminFloatingReminderEnabled,
     });
+
   } catch (error) {
-    console.error("[LoanWidget] Sync failed:", error);
+    console.error(
+      "[LoanWidget] Sync failed:",
+      error
+    );
+
     throw error;
   }
 }
 
+/**
+ * Get consent for any authenticated user.
+ */
 export async function getFloatingReminderConsentStatus(
   userId: string,
 ): Promise<{
@@ -278,6 +346,9 @@ export async function getFloatingReminderConsentStatus(
   });
 }
 
+/**
+ * Save individual user consent.
+ */
 export async function setFloatingReminderConsent(
   userId: string,
   enabled: boolean,
@@ -294,6 +365,9 @@ export async function setFloatingReminderConsent(
   }
 }
 
+/**
+ * Check Android overlay permission.
+ */
 export async function checkFloatingOverlayPermission(): Promise<boolean> {
   if (!isNative()) return false;
 
@@ -303,6 +377,9 @@ export async function checkFloatingOverlayPermission(): Promise<boolean> {
   return result.granted;
 }
 
+/**
+ * Request Android overlay permission.
+ */
 export async function requestFloatingOverlayPermission(): Promise<void> {
   if (!isNative()) return;
 
@@ -314,14 +391,50 @@ export async function requestFloatingOverlayPermission(): Promise<void> {
   }
 }
 
+/**
+ * Clear widget data.
+ */
 export async function clearLoanWidget(): Promise<void> {
   if (!isNative()) return;
 
   await NativeLoanWidget.clearData();
 }
 
+/**
+ * Stop floating reminder.
+ */
 export async function stopFloatingReminder(): Promise<void> {
   if (!isNative()) return;
 
   await NativeLoanWidget.stopFloatingReminder();
+}
+
+/**
+ * Test floating reminder.
+ */
+export async function testFloatingReminder(userId: string) {
+  if (!isNative()) {
+    throw new Error("Floating reminder test requires the native app.");
+  }
+
+  const result = await NativeLoanWidget.testFloatingReminder({ userId });
+
+  console.log("[LoanWidget TEST] Result:", result);
+
+  return result;
+}
+
+/**
+ * Diagnose floating reminder.
+ */
+export async function diagnoseFloatingReminder() {
+  if (!isNative()) {
+    throw new Error("Diagnostics require the native app.");
+  }
+
+  const result = await NativeLoanWidget.diagnoseFloatingReminder();
+
+  console.log("[LoanWidget DIAGNOSTICS]", result);
+
+  return result;
 }

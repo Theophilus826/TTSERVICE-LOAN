@@ -132,9 +132,7 @@ export default function Login() {
   ): Promise<void> => {
     event.preventDefault();
 
-    if (busy) {
-      return;
-    }
+    if (busy) return;
 
     const cleanIdentifier = identifier.trim();
 
@@ -151,20 +149,34 @@ export default function Login() {
     setSubmitting(true);
 
     try {
+      console.log("[Login] Starting PIN login...");
+
       await login({
         identifier: cleanIdentifier,
         password,
       });
 
+      console.log("[Login] PIN login successful.");
+
       toast.success("Login successful.");
 
+      console.log("[Login] Checking biometric availability...");
+
       const biometricStatus = await checkBiometricAvailability();
+
+      console.log("[Login] Biometric status:", biometricStatus);
+
       setBiometricStatusMessage(biometricStatus.error ?? "");
 
       if (biometricStatus.available && !biometricStatus.enabled) {
+        console.log("[Login] Opening biometric setup modal.");
+
         setShowBiometricSetup(true);
+      } else {
+        console.log("[Login] Biometric setup not required:", biometricStatus);
       }
     } catch (error: unknown) {
+      console.error("[Login] PIN login failed:", error);
       toast.error(getErrorMessage(error));
     } finally {
       setSubmitting(false);

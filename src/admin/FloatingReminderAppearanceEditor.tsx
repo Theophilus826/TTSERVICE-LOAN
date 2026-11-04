@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import adminRepaymentApi, {
   type FloatingReminderAppearance,
 } from "../services/adminRepaymentApi";
+import { syncLoanWidget } from "../services/loanWidget";
 
 const DEFAULT_APPEARANCE: FloatingReminderAppearance = {
   reminderWidth: 320,
@@ -78,6 +79,13 @@ const FloatingReminderAppearanceEditor: React.FC = () => {
         await adminRepaymentApi.updateFloatingReminderAppearance(
           settings
         );
+
+      void syncLoanWidget().catch((syncError) => {
+        console.error(
+          "Loan widget appearance sync failed:",
+          syncError
+        );
+      });
 
       setSettings({
         ...DEFAULT_APPEARANCE,

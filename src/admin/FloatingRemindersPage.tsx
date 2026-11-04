@@ -1,10 +1,10 @@
-
 import React, { useEffect, useState } from "react";
 import adminRepaymentApi, {
   FloatingReminder,
   FloatingReminderStatus,
   FloatingReminderSummary,
 } from "../services/adminRepaymentApi";
+import FloatingReminderAppearanceEditor from "./FloatingReminderAppearanceEditor";
 
 // =========================================================
 // HELPERS
@@ -110,16 +110,12 @@ const SummaryCard = ({
       <div>
         <p className="text-sm font-medium text-gray-500">{title}</p>
 
-        <h3 className="mt-2 text-2xl font-bold text-gray-900">
-          {value}
-        </h3>
+        <h3 className="mt-2 text-2xl font-bold text-gray-900">{value}</h3>
 
         <p className="mt-1 text-xs text-gray-500">{description}</p>
       </div>
 
-      <div className={`rounded-lg p-3 text-xl ${color}`}>
-        {icon}
-      </div>
+      <div className={`rounded-lg p-3 text-xl ${color}`}>{icon}</div>
     </div>
   </div>
 );
@@ -133,11 +129,9 @@ const FloatingRemindersPage: React.FC = () => {
   // STATES
   // -------------------------------------------------------
 
-  const [summary, setSummary] =
-    useState<FloatingReminderSummary | null>(null);
+  const [summary, setSummary] = useState<FloatingReminderSummary | null>(null);
 
-  const [reminders, setReminders] =
-    useState<FloatingReminder[]>([]);
+  const [reminders, setReminders] = useState<FloatingReminder[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -148,8 +142,7 @@ const FloatingRemindersPage: React.FC = () => {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
-  const [status, setStatus] =
-    useState<FloatingReminderStatus | "">("");
+  const [status, setStatus] = useState<FloatingReminderStatus | "">("");
 
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -173,8 +166,7 @@ const FloatingRemindersPage: React.FC = () => {
 
     const loadSummary = async () => {
       try {
-        const result =
-          await adminRepaymentApi.getFloatingReminderSummary();
+        const result = await adminRepaymentApi.getFloatingReminderSummary();
 
         if (cancelled) return;
 
@@ -187,7 +179,7 @@ const FloatingRemindersPage: React.FC = () => {
         setSummary(null);
 
         setSummaryError(
-          getErrorMessage(err, "Unable to load reminder summary.")
+          getErrorMessage(err, "Unable to load reminder summary."),
         );
       } finally {
         if (!cancelled) {
@@ -227,20 +219,16 @@ const FloatingRemindersPage: React.FC = () => {
       setError("");
 
       try {
-        const result =
-          await adminRepaymentApi.getFloatingReminders({
-            search: search.trim(),
-            status,
-            page,
-            limit,
-          });
+        const result = await adminRepaymentApi.getFloatingReminders({
+          search: search.trim(),
+          status,
+          page,
+          limit,
+        });
 
         if (cancelled) return;
 
-        const nextTotalPages = Math.max(
-          1,
-          result.pagination?.totalPages ?? 1
-        );
+        const nextTotalPages = Math.max(1, result.pagination?.totalPages ?? 1);
 
         setTotalRecords(result.pagination?.total ?? 0);
         setTotalPages(nextTotalPages);
@@ -256,12 +244,7 @@ const FloatingRemindersPage: React.FC = () => {
 
         console.error("Failed to load floating reminders:", err);
 
-        setError(
-          getErrorMessage(
-            err,
-            "Unable to load floating reminders."
-          )
-        );
+        setError(getErrorMessage(err, "Unable to load floating reminders."));
 
         setReminders([]);
         setTotalRecords(0);
@@ -355,8 +338,7 @@ const FloatingRemindersPage: React.FC = () => {
       try {
         console.log("[TEST 1] Testing reminder summary API...");
 
-        const summary =
-          await adminRepaymentApi.getFloatingReminderSummary();
+        const summary = await adminRepaymentApi.getFloatingReminderSummary();
 
         console.log("[TEST 1] SUMMARY API SUCCESS:", summary);
       } catch (error) {
@@ -370,13 +352,12 @@ const FloatingRemindersPage: React.FC = () => {
       try {
         console.log("[TEST 2] Testing reminder list API...");
 
-        const result =
-          await adminRepaymentApi.getFloatingReminders({
-            page: 1,
-            limit: 5,
-            search: "",
-            status: "",
-          });
+        const result = await adminRepaymentApi.getFloatingReminders({
+          page: 1,
+          limit: 5,
+          search: "",
+          status: "",
+        });
 
         console.log("[TEST 2] REMINDER API SUCCESS:", {
           total: result.pagination?.total,
@@ -395,17 +376,15 @@ const FloatingRemindersPage: React.FC = () => {
             customer: reminder.user?.name || "Unknown",
             enabled: reminder.enabled,
             consent: reminder.consentGranted,
-            overlayPermission:
-              reminder.overlayPermissionGranted,
+            overlayPermission: reminder.overlayPermissionGranted,
             status: reminder.status,
             unpaidInstallments: reminder.unpaidInstallments,
             lastError: reminder.lastError || "None",
-          }))
+          })),
         );
       } catch (error) {
         console.error("[TEST 2] REMINDER API FAILED:", error);
       }
-
     } catch (error) {
       console.error("[DIAGNOSTICS] Unexpected failure:", error);
     } finally {
@@ -447,11 +426,9 @@ const FloatingRemindersPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-
         {/* PAGE HEADER */}
 
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-
           <div>
             <div className="flex items-center gap-2">
               <span className="text-2xl">🔔</span>
@@ -462,15 +439,14 @@ const FloatingRemindersPage: React.FC = () => {
             </div>
 
             <p className="mt-2 text-sm text-gray-500">
-              Monitor customer loan repayment reminders, cooldowns,
-              permissions and errors.
+              Monitor customer loan repayment reminders, cooldowns, permissions
+              and errors.
             </p>
           </div>
 
           {/* HEADER ACTIONS */}
 
           <div className="flex flex-wrap items-center gap-3">
-
             {/* RUN DIAGNOSTICS */}
 
             <button
@@ -495,7 +471,6 @@ const FloatingRemindersPage: React.FC = () => {
               <span>↻</span>
               Refresh
             </button>
-
           </div>
         </div>
 
@@ -506,9 +481,7 @@ const FloatingRemindersPage: React.FC = () => {
             role="alert"
             className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
           >
-            <p className="font-semibold">
-              Unable to load reminder summary
-            </p>
+            <p className="font-semibold">Unable to load reminder summary</p>
 
             <p className="mt-1">{summaryError}</p>
 
@@ -524,7 +497,6 @@ const FloatingRemindersPage: React.FC = () => {
         {/* SUMMARY CARDS */}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-
           <SummaryCard
             title="Total reminders"
             value={summaryValue(summary?.total)}
@@ -564,17 +536,13 @@ const FloatingRemindersPage: React.FC = () => {
             icon="⚠️"
             color="bg-red-50"
           />
-
         </div>
 
         {/* SECONDARY SUMMARY */}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
           <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <p className="text-sm text-gray-500">
-              Disabled reminders
-            </p>
+            <p className="text-sm text-gray-500">Disabled reminders</p>
 
             <h3 className="mt-2 text-xl font-bold text-gray-900">
               {summaryValue(summary?.disabled)}
@@ -582,9 +550,7 @@ const FloatingRemindersPage: React.FC = () => {
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <p className="text-sm text-gray-500">
-              Permission denied
-            </p>
+            <p className="text-sm text-gray-500">Permission denied</p>
 
             <h3 className="mt-2 text-xl font-bold text-orange-600">
               {summaryValue(summary?.permissionDenied)}
@@ -592,9 +558,7 @@ const FloatingRemindersPage: React.FC = () => {
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <p className="text-sm text-gray-500">
-              Total unpaid installments
-            </p>
+            <p className="text-sm text-gray-500">Total unpaid installments</p>
 
             <h3 className="mt-2 text-xl font-bold text-gray-900">
               {summaryValue(summary?.unpaidInstallments)}
@@ -604,13 +568,15 @@ const FloatingRemindersPage: React.FC = () => {
               Across registered reminder records
             </p>
           </div>
-
         </div>
 
+        {/* GLOBAL APPEARANCE SETTINGS */}
+
+        <FloatingReminderAppearanceEditor />
+        
         {/* UNPAID AMOUNT */}
 
         <div className="rounded-xl border border-gray-200 bg-white p-5">
-
           <p className="text-sm font-medium text-gray-500">
             Total outstanding amount tracked
           </p>
@@ -619,22 +585,18 @@ const FloatingRemindersPage: React.FC = () => {
             {summaryLoading
               ? "Loading..."
               : summaryError
-              ? "Unavailable"
-              : formatCurrency(summary?.unpaidAmount ?? 0)}
+                ? "Unavailable"
+                : formatCurrency(summary?.unpaidAmount ?? 0)}
           </h2>
-
         </div>
 
         {/* CUSTOMER TABLE */}
 
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-
           {/* TABLE HEADER */}
 
           <div className="border-b border-gray-200 p-5">
-
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-
               <div>
                 <h2 className="text-lg font-bold text-gray-900">
                   Customer reminders
@@ -648,7 +610,6 @@ const FloatingRemindersPage: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
-
                 {/* SEARCH */}
 
                 <input
@@ -670,12 +631,9 @@ const FloatingRemindersPage: React.FC = () => {
                   <option value="active">Active</option>
                   <option value="cooldown">Cooldown</option>
                   <option value="disabled">Disabled</option>
-                  <option value="permission_denied">
-                    Permission denied
-                  </option>
+                  <option value="permission_denied">Permission denied</option>
                   <option value="error">Error</option>
                 </select>
-
               </div>
             </div>
           </div>
@@ -684,10 +642,7 @@ const FloatingRemindersPage: React.FC = () => {
 
           {error && (
             <div className="m-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-
-              <p className="font-semibold">
-                Unable to load reminders
-              </p>
+              <p className="font-semibold">Unable to load reminders</p>
 
               <p className="mt-1">{error}</p>
 
@@ -697,28 +652,21 @@ const FloatingRemindersPage: React.FC = () => {
               >
                 Try again
               </button>
-
             </div>
           )}
 
           {/* LOADING */}
 
           {loading ? (
-
             <div className="flex flex-col items-center justify-center py-20">
-
               <div className="h-9 w-9 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
 
               <p className="mt-4 text-sm text-gray-500">
                 Loading customer reminders...
               </p>
-
             </div>
-
           ) : !error && reminders.length === 0 ? (
-
             <div className="py-20 text-center">
-
               <div className="text-4xl">🔔</div>
 
               <h3 className="mt-4 font-semibold text-gray-900">
@@ -728,19 +676,13 @@ const FloatingRemindersPage: React.FC = () => {
               <p className="mt-2 text-sm text-gray-500">
                 There are no reminder records matching your filters.
               </p>
-
             </div>
-
           ) : !error ? (
-
             /* TABLE */
 
             <div className="overflow-x-auto">
-
               <table className="w-full min-w-[1150px] text-left text-sm">
-
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-
                   <tr>
                     <th className="px-5 py-4">Customer</th>
                     <th className="px-5 py-4">Status</th>
@@ -751,22 +693,17 @@ const FloatingRemindersPage: React.FC = () => {
                     <th className="px-5 py-4">Reminder timing</th>
                     <th className="px-5 py-4">Last error</th>
                   </tr>
-
                 </thead>
 
                 <tbody className="divide-y divide-gray-100">
-
                   {reminders.map((reminder) => (
-
                     <tr
                       key={reminder._id}
                       className="transition hover:bg-gray-50"
                     >
-
                       {/* CUSTOMER */}
 
                       <td className="px-5 py-4">
-
                         <div className="font-semibold text-gray-900">
                           {getCustomerName(reminder)}
                         </div>
@@ -778,16 +715,14 @@ const FloatingRemindersPage: React.FC = () => {
                         <div className="mt-1 text-xs text-gray-500">
                           {reminder.user?.phone || "No phone"}
                         </div>
-
                       </td>
 
                       {/* STATUS */}
 
                       <td className="px-5 py-4">
-
                         <span
                           className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                            reminder.status
+                            reminder.status,
                           )}`}
                         >
                           {getStatusLabel(reminder.status)}
@@ -796,13 +731,11 @@ const FloatingRemindersPage: React.FC = () => {
                         <div className="mt-2 text-xs text-gray-500">
                           {reminder.enabled ? "Enabled" : "Not enabled"}
                         </div>
-
                       </td>
 
                       {/* OVERLAY PERMISSION */}
 
                       <td className="px-5 py-4">
-
                         <span
                           className={
                             reminder.overlayPermissionGranted
@@ -816,31 +749,25 @@ const FloatingRemindersPage: React.FC = () => {
                         </span>
 
                         <div className="mt-1 text-xs text-gray-500">
-                          Consent:{" "}
-                          {reminder.consentGranted ? "Yes" : "No"}
+                          Consent: {reminder.consentGranted ? "Yes" : "No"}
                         </div>
-
                       </td>
 
                       {/* UNPAID INSTALLMENTS */}
 
                       <td className="px-5 py-4">
-
                         <span className="font-semibold text-gray-900">
                           {reminder.unpaidInstallments}
                         </span>
-
                       </td>
 
                       {/* OUTSTANDING */}
 
                       <td className="px-5 py-4 font-semibold text-gray-900">
-
                         {formatCurrency(
                           reminder.unpaidAmount,
-                          reminder.currency
+                          reminder.currency,
                         )}
-
                       </td>
 
                       {/* LAST PAYMENT */}
@@ -852,7 +779,6 @@ const FloatingRemindersPage: React.FC = () => {
                       {/* REMINDER TIMING */}
 
                       <td className="px-5 py-4 text-gray-600">
-
                         <div>
                           Last shown: {formatDate(reminder.lastReminderAt)}
                         </div>
@@ -862,59 +788,40 @@ const FloatingRemindersPage: React.FC = () => {
                             Cooldown until: {formatDate(reminder.cooldownUntil)}
                           </div>
                         )}
-
                       </td>
 
                       {/* LAST ERROR */}
 
                       <td className="max-w-xs px-5 py-4">
-
                         {reminder.lastError ? (
-
                           <span
                             className="block truncate text-xs text-red-600"
                             title={reminder.lastError}
                           >
                             {reminder.lastError}
                           </span>
-
                         ) : (
-
-                          <span className="text-gray-400">
-                            None
-                          </span>
-
+                          <span className="text-gray-400">None</span>
                         )}
-
                       </td>
-
                     </tr>
-
                   ))}
-
                 </tbody>
               </table>
-
             </div>
-
           ) : null}
 
           {/* PAGINATION */}
 
           {!loading && !error && reminders.length > 0 && (
-
             <div className="flex flex-col items-center justify-between gap-4 border-t border-gray-200 px-5 py-4 sm:flex-row">
-
               <p className="text-sm text-gray-500">
                 Page {page} of {totalPages} · {totalRecords} records
               </p>
 
               <div className="flex items-center gap-2">
-
                 <button
-                  onClick={() =>
-                    setPage((current) => Math.max(1, current - 1))
-                  }
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
                   disabled={page <= 1}
                   className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -923,32 +830,25 @@ const FloatingRemindersPage: React.FC = () => {
 
                 <button
                   onClick={() =>
-                    setPage((current) =>
-                      Math.min(totalPages, current + 1)
-                    )
+                    setPage((current) => Math.min(totalPages, current + 1))
                   }
                   disabled={page >= totalPages}
                   className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>
-
               </div>
-
             </div>
-
           )}
-
         </div>
 
         {/* FOOTER NOTE */}
 
         <p className="text-center text-xs text-gray-400">
-          Floating reminder information is provided by registered
-          backend reminder records. Last refreshed when this page loads
-          or when you select Refresh.
+          Floating reminder information is provided by registered backend
+          reminder records. Last refreshed when this page loads or when you
+          select Refresh.
         </p>
-
       </div>
     </div>
   );

@@ -7,6 +7,28 @@ import repaymentApi, {
   type RepaymentInstallment,
 } from "./repaymentApi";
 
+interface FloatingReminderAppearance {
+  reminderWidth: number;
+  reminderBackgroundHex: string;
+  reminderTextColor: string;
+  reminderTextSize: number;
+  reminderCornerRadius: number;
+  reminderHorizontalPadding: number;
+  reminderVerticalPadding: number;
+  reminderPositionY: number;
+}
+
+const DEFAULT_REMINDER_APPEARANCE: FloatingReminderAppearance = {
+  reminderWidth: 320,
+  reminderBackgroundHex: "#173B68",
+  reminderTextColor: "#FFFFFF",
+  reminderTextSize: 14,
+  reminderCornerRadius: 18,
+  reminderHorizontalPadding: 20,
+  reminderVerticalPadding: 16,
+  reminderPositionY: 100,
+};
+
 interface LoanWidgetPlugin {
   updateData(options: {
     userId: string;
@@ -18,6 +40,15 @@ interface LoanWidgetPlugin {
     paymentDue: boolean;
     floatingReminderEnabled: boolean;
     unpaidInstallmentIds: string[];
+
+    reminderWidth: number;
+    reminderBackgroundHex: string;
+    reminderTextColor: string;
+    reminderTextSize: number;
+    reminderCornerRadius: number;
+    reminderHorizontalPadding: number;
+    reminderVerticalPadding: number;
+    reminderPositionY: number;
   }): Promise<{ success: boolean }>;
 
   clearData(): Promise<{ success: boolean }>;
@@ -177,6 +208,100 @@ const getNextInstallment = (
 };
 
 /**
+ * Validate and normalize global reminder appearance.
+ * Invalid or missing values fall back to the defaults.
+ */
+const normalizeReminderAppearance = (
+  appearance?: Partial<FloatingReminderAppearance> | null,
+): FloatingReminderAppearance => {
+  const source = appearance ?? {};
+
+  const validColor = (
+    value: unknown,
+    fallback: string,
+  ): string => {
+    if (
+      typeof value === "string" &&
+      /^#[0-9A-Fa-f]{6}$/.test(value)
+    ) {
+      return value.toUpperCase();
+    }
+
+    return fallback;
+  };
+
+  const validNumber = (
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number,
+  ): number => {
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value)
+    ) {
+      return fallback;
+    }
+
+    return Math.min(max, Math.max(min, value));
+  };
+
+  return {
+    reminderWidth: validNumber(
+      source.reminderWidth,
+      DEFAULT_REMINDER_APPEARANCE.reminderWidth,
+      200,
+      600
+    ),
+
+    reminderBackgroundHex: validColor(
+      source.reminderBackgroundHex,
+      DEFAULT_REMINDER_APPEARANCE.reminderBackgroundHex
+    ),
+
+    reminderTextColor: validColor(
+      source.reminderTextColor,
+      DEFAULT_REMINDER_APPEARANCE.reminderTextColor
+    ),
+
+    reminderTextSize: validNumber(
+      source.reminderTextSize,
+      DEFAULT_REMINDER_APPEARANCE.reminderTextSize,
+      10,
+      30
+    ),
+
+    reminderCornerRadius: validNumber(
+      source.reminderCornerRadius,
+      DEFAULT_REMINDER_APPEARANCE.reminderCornerRadius,
+      0,
+      50
+    ),
+
+    reminderHorizontalPadding: validNumber(
+      source.reminderHorizontalPadding,
+      DEFAULT_REMINDER_APPEARANCE.reminderHorizontalPadding,
+      0,
+      60
+    ),
+
+    reminderVerticalPadding: validNumber(
+      source.reminderVerticalPadding,
+      DEFAULT_REMINDER_APPEARANCE.reminderVerticalPadding,
+      0,
+      60
+    ),
+
+    reminderPositionY: validNumber(
+      source.reminderPositionY,
+      DEFAULT_REMINDER_APPEARANCE.reminderPositionY,
+      0,
+      2000
+    ),
+  };
+};
+
+/**
  * Synchronize floating reminder and home-screen widget.
  * Works for every authenticated user, regardless of role.
  */
@@ -203,6 +328,7 @@ export async function syncLoanWidget(): Promise<void> {
       scheduleResult,
       accountResult,
       settingsResult,
+      appearanceResult,
     ] = await Promise.allSettled([
       repaymentApi.getMyRepaymentSchedules(),
 
@@ -215,6 +341,12 @@ export async function syncLoanWidget(): Promise<void> {
           floatingReminderEnabled?: boolean;
         };
       }>("/settings/widget"),
+
+      // Customer-accessible authenticated GET endpoint.
+      API.get<{
+        success?: boolean;
+        data?: FloatingReminderAppearance;
+      }>("/settings/floating-reminder-appearance"),
     ]);
 
     const schedules =
@@ -253,6 +385,21 @@ export async function syncLoanWidget(): Promise<void> {
         settingsResult.reason
       );
     }
+
+    const appearanceData =
+      appearanceResult.status === "fulfilled"
+        ? appearanceResult.value.data?.data
+        : undefined;
+
+    if (appearanceResult.status === "rejected") {
+      console.warn(
+        "[LoanWidget] Reminder appearance unavailable. Using defaults:",
+        appearanceResult.reason
+      );
+    }
+
+    const appearance =
+      normalizeReminderAppearance(appearanceData);
 
     const adminMessage = settings?.widgetMessage;
 
@@ -303,6 +450,18 @@ export async function syncLoanWidget(): Promise<void> {
         adminFloatingReminderEnabled,
 
       unpaidInstallmentIds,
+
+      // Global admin-configured appearance.
+      reminderWidth: appearance.reminderWidth,
+      reminderBackgroundHex: appearance.reminderBackgroundHex,
+      reminderTextColor: appearance.reminderTextColor,
+      reminderTextSize: appearance.reminderTextSize,
+      reminderCornerRadius: appearance.reminderCornerRadius,
+      reminderHorizontalPadding:
+        appearance.reminderHorizontalPadding,
+      reminderVerticalPadding:
+        appearance.reminderVerticalPadding,
+      reminderPositionY: appearance.reminderPositionY,
     });
 
     console.log("[LoanWidget] Sync completed", {
@@ -311,6 +470,7 @@ export async function syncLoanWidget(): Promise<void> {
       unpaidInstallments: unpaidInstallmentIds.length,
       floatingReminderEnabled:
         adminFloatingReminderEnabled,
+      appearance,
     });
 
   } catch (error) {

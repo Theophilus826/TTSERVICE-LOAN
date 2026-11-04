@@ -1,4 +1,3 @@
-
 import API from "./Api";
 
 // =========================================================
@@ -287,6 +286,20 @@ export interface FloatingReminderPagination {
   totalPages: number;
 }
 
+// =========================================================
+// FLOATING REMINDER APPEARANCE SETTINGS
+// =========================================================
+
+export interface FloatingReminderAppearance {
+  reminderWidth: number;
+  reminderBackgroundHex: string;
+  reminderTextColor: string;
+  reminderTextSize: number;
+  reminderCornerRadius: number;
+  reminderHorizontalPadding: number;
+  reminderVerticalPadding: number;
+  reminderPositionY: number;
+}
 export interface GetFloatingRemindersParams {
   status?: FloatingReminderStatus | "";
   search?: string;
@@ -324,7 +337,7 @@ const adminRepaymentApi = {
    * Get paginated repayments with optional filters.
    */
   async getRepayments(
-    params: GetAdminRepaymentsParams = {}
+    params: GetAdminRepaymentsParams = {},
   ): Promise<AdminRepaymentsPagination> {
     const response = await API.get("/admin/repayments", {
       params,
@@ -347,14 +360,11 @@ const adminRepaymentApi = {
    * - limit
    */
   async getFloatingReminders(
-    params: GetFloatingRemindersParams = {}
+    params: GetFloatingRemindersParams = {},
   ): Promise<FloatingReminderListResponse> {
-    const response = await API.get(
-      "/admin/repayments/floating-reminders",
-      {
-        params,
-      }
-    );
+    const response = await API.get("/admin/repayments/floating-reminders", {
+      params,
+    });
 
     return response.data.data;
   },
@@ -364,7 +374,33 @@ const adminRepaymentApi = {
    */
   async getFloatingReminderSummary(): Promise<FloatingReminderSummary> {
     const response = await API.get(
-      "/admin/repayments/floating-reminders/summary"
+      "/admin/repayments/floating-reminders/summary",
+    );
+
+    return response.data.data;
+  },
+
+  // -------------------------------------------------------
+  // FLOATING REMINDER APPEARANCE
+  // -------------------------------------------------------
+
+  /**
+   * Get the global floating reminder appearance settings.
+   */
+  async getFloatingReminderAppearance(): Promise<FloatingReminderAppearance> {
+    const response = await API.get(
+      "/admin/repayments/floating-reminders/appearance",
+    );
+
+    return response.data.data;
+  },
+
+  async updateFloatingReminderAppearance(
+    settings: FloatingReminderAppearance,
+  ): Promise<FloatingReminderAppearance> {
+    const response = await API.put(
+      "/admin/repayments/floating-reminders/appearance",
+      settings,
     );
 
     return response.data.data;
@@ -379,15 +415,15 @@ const adminRepaymentApi = {
    */
   async collectMandateRepayment(
     loanId: string,
-    amount: number
+    amount: number,
   ): Promise<CollectMandateRepaymentResponse> {
     const response = await API.post(
       `/admin/repayments/loans/${encodeURIComponent(
-        loanId
+        loanId,
       )}/repayments/collect`,
       {
         amount,
-      }
+      },
     );
 
     return response.data.data;
@@ -402,15 +438,15 @@ const adminRepaymentApi = {
    */
   async reconcilePayment(
     loanId: string,
-    providerReference: string
+    providerReference: string,
   ): Promise<ReconcilePaymentResponse> {
     const response = await API.post(
       `/admin/repayments/loans/${encodeURIComponent(
-        loanId
+        loanId,
       )}/repayments/reconcile`,
       {
         providerReference,
-      }
+      },
     );
 
     return response.data.data;
@@ -425,9 +461,7 @@ const adminRepaymentApi = {
    * This endpoint must not initiate any payments.
    */
   async previewAutoDebit(): Promise<AutoDebitPreviewResponse> {
-    const response = await API.get(
-      "/admin/repayments/auto-debit/preview"
-    );
+    const response = await API.get("/admin/repayments/auto-debit/preview");
 
     return response.data.data;
   },
@@ -444,9 +478,7 @@ const adminRepaymentApi = {
    * charges, and verify provider outcomes.
    */
   async runAutoDebit(): Promise<AutoDebitRunResponse> {
-    const response = await API.post(
-      "/admin/repayments/auto-debit/run"
-    );
+    const response = await API.post("/admin/repayments/auto-debit/run");
 
     return response.data.data;
   },

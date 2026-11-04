@@ -36,16 +36,8 @@ const USER_ID_KEY = "userId";
 ========================================================= */
 
 type RetryableRequest = InternalAxiosRequestConfig & {
-  _retry?: boolean;
   _fallbackTried?: boolean;
-  skipAuthRefresh?: boolean;
 };
-
-interface RefreshResponse {
-  success: boolean;
-  token?: string;
-  message?: string;
-}
 
 interface ApiErrorResponse {
   message?: unknown;
@@ -69,8 +61,8 @@ const API = axios.create({
     Accept: "application/json",
   },
 
-  // Supports secure refresh cookies when the backend
-  // is configured for cookie-based authentication.
+  // Supports secure cookies when the backend uses
+  // cookie-based authentication.
   withCredentials: true,
 });
 
@@ -86,37 +78,6 @@ const clearLocalSession = (): void => {
   localStorage.removeItem(USER_ID_KEY);
 };
 
-const saveAccessToken = (token: string): void => {
-  if (!token) {
-    throw new Error("Access token is missing.");
-  }
-
-  localStorage.setItem(TOKEN_KEY, token);
-
-  // Keep the existing AuthService user shape compatible.
-  const savedUser = localStorage.getItem(USER_KEY);
-
-  if (!savedUser) return;
-
-  try {
-    const user = JSON.parse(savedUser) as {
-      token?: string;
-    };
-
-    user.token = token;
-
-    localStorage.setItem(
-      USER_KEY,
-      JSON.stringify(user),
-    );
-  } catch {
-    // Do not turn a successful token refresh into a
-    // failed request because cached profile JSON is bad.
-    localStorage.removeItem(USER_KEY);
-    localStorage.removeItem(USER_ID_KEY);
-  }
-};
-
 /* =========================================================
    PUBLIC AUTH ENDPOINTS
 ========================================================= */
@@ -124,7 +85,7 @@ const saveAccessToken = (token: string): void => {
 const isPublicAuthEndpoint = (
   url = "",
 ): boolean => {
-  return /\/users\/(login|register|forgot-password|reset-password|refresh)(\/|$)/i.test(
+  return /\/users\/(login|register|forgot-password|reset-password)(\/|$)/i.test(
     url,
   );
 };
@@ -165,51 +126,6 @@ API.interceptors.request.use(
   },
   (error: unknown) => Promise.reject(error),
 );
-
-/* =========================================================
-   SINGLE-FLIGHT TOKEN REFRESH
-========================================================= */
-
-// If several requests return 401 together, they share
-// one refresh request rather than rotating the token
-// multiple times concurrently.
-
-let refreshPromise: Promise<string> | null = null;
-
-const refreshAccessToken = (): Promise<string> => {
-  if (!refreshPromise) {
-    refreshPromise = API.post<RefreshResponse>(
-      "/users/refresh",
-      {},
-      {
-        // Avoid inheriting a stale Authorization header
-        // from the normal request interceptor.
-        headers: {
-          Authorization: "",
-        },
-        skipAuthRefresh: true,
-      } as never,
-    )
-      .then((response) => {
-        const { success, token } = response.data;
-
-        if (!success || !token) {
-          throw new Error(
-            "Session renewal failed.",
-          );
-        }
-
-        saveAccessToken(token);
-
-        return token;
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
-  }
-
-  return refreshPromise;
-};
 
 /* =========================================================
    UNAUTHORIZED EVENT
@@ -275,43 +191,13 @@ API.interceptors.response.use(
     }
 
     /* -----------------------------------------------------
-       TOKEN REFRESH
+       UNAUTHORIZED
     ----------------------------------------------------- */
 
     if (
       status === 401 &&
       original &&
-      !original._retry &&
-      !original.skipAuthRefresh &&
       !isPublicAuthEndpoint(original.url)
-    ) {
-      original._retry = true;
-
-      try {
-        const token = await refreshAccessToken();
-
-        original.headers.Authorization =
-          `Bearer ${token}`;
-
-        return await API.request(original);
-      } catch (refreshError) {
-        notifyUnauthorized();
-
-        return Promise.reject(refreshError);
-      }
-    }
-
-    /* -----------------------------------------------------
-       INVALID PUBLIC AUTH REQUEST
-    ----------------------------------------------------- */
-
-    // Bad login credentials must not destroy an existing
-    // locally saved session.
-    if (
-      status === 401 &&
-      original &&
-      !isPublicAuthEndpoint(original.url) &&
-      !original.skipAuthRefresh
     ) {
       notifyUnauthorized();
     }

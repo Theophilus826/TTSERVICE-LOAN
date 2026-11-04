@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useCallback,
@@ -16,10 +15,7 @@ import authApi, {
   type UserRole,
 } from "../services/AuthService";
 
-import {
-  clearLoanWidget,
-  syncLoanWidget,
-} from "../services/loanWidget";
+import { clearLoanWidget, syncLoanWidget } from "../services/loanWidget";
 
 import biometricAuth from "../services/biometricAuth";
 
@@ -58,10 +54,7 @@ export interface AuthContextValue {
   logout(): Promise<void>;
   refreshUser(): Promise<AuthUser | null>;
 
-  resetPassword(
-    token: string,
-    password: string,
-  ): Promise<string>;
+  resetPassword(token: string, password: string): Promise<string>;
 
   // Biometric functions
   checkBiometricAvailability(): Promise<{
@@ -77,9 +70,7 @@ export interface AuthContextValue {
   // Roles
   getRole(): UserRole | null;
 
-  hasRole(
-    roles: UserRole | readonly UserRole[],
-  ): boolean;
+  hasRole(roles: UserRole | readonly UserRole[]): boolean;
 
   isAdmin(): boolean;
   isSuperAdmin(): boolean;
@@ -93,9 +84,7 @@ export interface AuthContextValue {
    CONTEXT
 ========================================================= */
 
-const AuthContext = createContext<
-  AuthContextValue | undefined
->(undefined);
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 /* =========================================================
    PROVIDER PROPS
@@ -109,17 +98,12 @@ export interface AuthProviderProps {
    AUTH PROVIDER
 ========================================================= */
 
-export const AuthProvider = ({
-  children,
-}: AuthProviderProps) => {
-
+export const AuthProvider = ({ children }: AuthProviderProps) => {
   /* =======================================================
      USER STATE
   ======================================================= */
 
-  const [user, setUser] = useState<AuthUser | null>(
-    () => authApi.getUser(),
-  );
+  const [user, setUser] = useState<AuthUser | null>(() => authApi.getUser());
 
   /* =======================================================
      LOADING STATES
@@ -129,8 +113,7 @@ export const AuthProvider = ({
 
   const [initializing, setInitializing] = useState(true);
 
-  const [biometricLoading, setBiometricLoading] =
-    useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   /* =======================================================
      BIOMETRIC STATES
@@ -139,11 +122,9 @@ export const AuthProvider = ({
      from the visibility of the fingerprint icon.
   ======================================================= */
 
-  const [isBiometricAvailable, setIsBiometricAvailable] =
-    useState(false);
+  const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
 
-  const [isBiometricEnabled, setIsBiometricEnabled] =
-    useState(false);
+  const [isBiometricEnabled, setIsBiometricEnabled] = useState(false);
 
   /* =======================================================
      RESTORE SESSION
@@ -162,10 +143,7 @@ export const AuthProvider = ({
 
       setUser(currentUser);
     } catch (error) {
-      console.error(
-        "Session restoration failed:",
-        error,
-      );
+      console.error("Session restoration failed:", error);
 
       setUser(null);
     } finally {
@@ -184,52 +162,45 @@ export const AuthProvider = ({
      It only checks device support and saved registration.
   ======================================================= */
 
-  const checkBiometricAvailability =
-    useCallback(async (): Promise<{
-      available: boolean;
-      enabled: boolean;
-      error?: string;
-    }> => {
-      try {
-        const status = await biometricAuth.getBiometricStatus();
-        const available = status.isAvailable;
+  const checkBiometricAvailability = useCallback(async (): Promise<{
+    available: boolean;
+    enabled: boolean;
+    error?: string;
+  }> => {
+    try {
+      const status = await biometricAuth.getBiometricStatus();
+      const available = status.isAvailable;
 
-        let enabled = false;
+      let enabled = false;
 
-        if (available) {
-          enabled =
-            await biometricAuth.isBiometricEnabled();
-        }
-
-        setIsBiometricAvailable(available);
-        setIsBiometricEnabled(enabled);
-
-        return {
-          available,
-          enabled,
-          ...(!available && status.reason
-            ? { error: status.reason }
-            : {}),
-        };
-      } catch (error) {
-        console.error(
-          "Biometric availability check failed:",
-          error,
-        );
-
-        setIsBiometricAvailable(false);
-        setIsBiometricEnabled(false);
-
-        return {
-          available: false,
-          enabled: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Unable to check biometric availability.",
-        };
+      if (available) {
+        enabled = await biometricAuth.isBiometricEnabled();
       }
-    }, []);
+
+      setIsBiometricAvailable(available);
+      setIsBiometricEnabled(enabled);
+
+      return {
+        available,
+        enabled,
+        ...(!available && status.reason ? { error: status.reason } : {}),
+      };
+    } catch (error) {
+      console.error("Biometric availability check failed:", error);
+
+      setIsBiometricAvailable(false);
+      setIsBiometricEnabled(false);
+
+      return {
+        available: false,
+        enabled: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to check biometric availability.",
+      };
+    }
+  }, []);
 
   /* =======================================================
      INITIAL BIOMETRIC CHECK
@@ -248,16 +219,10 @@ export const AuthProvider = ({
       setUser(null);
     };
 
-    window.addEventListener(
-      "auth:unauthorized",
-      handleUnauthorized,
-    );
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
 
     return () => {
-      window.removeEventListener(
-        "auth:unauthorized",
-        handleUnauthorized,
-      );
+      window.removeEventListener("auth:unauthorized", handleUnauthorized);
     };
   }, []);
 
@@ -268,23 +233,14 @@ export const AuthProvider = ({
   useEffect(() => {
     const clearWidget = (): void => {
       void clearLoanWidget().catch((error) => {
-        console.error(
-          "clearLoanWidget failed:",
-          error,
-        );
+        console.error("clearLoanWidget failed:", error);
       });
     };
 
     const syncWidget = (): void => {
-      if (
-        document.visibilityState === "visible" &&
-        user
-      ) {
+      if (document.visibilityState === "visible" && user) {
         void syncLoanWidget().catch((error) => {
-          console.error(
-            "syncLoanWidget failed:",
-            error,
-          );
+          console.error("syncLoanWidget failed:", error);
         });
       }
     };
@@ -292,19 +248,13 @@ export const AuthProvider = ({
     if (user) {
       syncWidget();
 
-      document.addEventListener(
-        "visibilitychange",
-        syncWidget,
-      );
+      document.addEventListener("visibilitychange", syncWidget);
     } else {
       clearWidget();
     }
 
     return () => {
-      document.removeEventListener(
-        "visibilitychange",
-        syncWidget,
-      );
+      document.removeEventListener("visibilitychange", syncWidget);
     };
   }, [user, initializing]);
 
@@ -318,25 +268,21 @@ export const AuthProvider = ({
 
       try {
         if (!isValidPin(data.password)) {
-          throw new Error(
-            "PIN must be exactly 4 digits.",
-          );
+          throw new Error("PIN must be exactly 4 digits.");
         }
 
         const identifier = data.identifier.trim();
 
-        const normalizedIdentifier =
-          isValidNigerianPhone(identifier)
-            ? normalizeNigerianPhone(identifier)
-            : identifier;
+        const normalizedIdentifier = isValidNigerianPhone(identifier)
+          ? normalizeNigerianPhone(identifier)
+          : identifier;
 
         const loginData: LoginData = {
           ...data,
           identifier: normalizedIdentifier,
         };
 
-        const authenticatedUser =
-          await authApi.login(loginData);
+        const authenticatedUser = await authApi.login(loginData);
 
         setUser(authenticatedUser);
 
@@ -361,15 +307,11 @@ export const AuthProvider = ({
 
       try {
         if (!isValidPin(data.password)) {
-          throw new Error(
-            "PIN must be exactly 4 digits.",
-          );
+          throw new Error("PIN must be exactly 4 digits.");
         }
 
         if (!isValidPin(data.confirmPassword)) {
-          throw new Error(
-            "Confirm PIN must be exactly 4 digits.",
-          );
+          throw new Error("Confirm PIN must be exactly 4 digits.");
         }
 
         if (data.password !== data.confirmPassword) {
@@ -385,8 +327,7 @@ export const AuthProvider = ({
           phone: normalizedPhone,
         };
 
-        const authenticatedUser =
-          await authApi.register(registerData);
+        const authenticatedUser = await authApi.register(registerData);
 
         setUser(authenticatedUser);
 
@@ -404,113 +345,103 @@ export const AuthProvider = ({
      ENABLE BIOMETRIC LOGIN
   ======================================================= */
 
-  const enableBiometricLogin =
-    useCallback(async (): Promise<void> => {
-      setBiometricLoading(true);
+  const enableBiometricLogin = useCallback(async (): Promise<void> => {
+    setBiometricLoading(true);
 
-      try {
-        if (!user || !authApi.getToken()) {
-          throw new Error(
-            "Please log in with your PIN first.",
-          );
-        }
-
-        const available =
-          await biometricAuth.isBiometricAvailable();
-
-        if (!available) {
-          throw new Error(
-            "Fingerprint authentication is not available on this device.",
-          );
-        }
-
-        await biometricAuth.enableBiometricLogin();
-
-        // Verify that registration was saved.
-        const enabled =
-          await biometricAuth.isBiometricEnabled();
-
-        if (!enabled) {
-          throw new Error(
-            "Fingerprint login could not be enabled. Please try again.",
-          );
-        }
-
-        setIsBiometricAvailable(true);
-        setIsBiometricEnabled(true);
-      } finally {
-        setBiometricLoading(false);
+    try {
+      if (!user || !authApi.getToken()) {
+        throw new Error("Please log in with your PIN first.");
       }
-    }, [user]);
+
+      const available = await biometricAuth.isBiometricAvailable();
+
+      if (!available) {
+        throw new Error(
+          "Fingerprint authentication is not available on this device.",
+        );
+      }
+
+      await biometricAuth.enableBiometricLogin();
+
+      // Verify that registration was saved.
+      const enabled = await biometricAuth.isBiometricEnabled();
+
+      if (!enabled) {
+        throw new Error(
+          "Fingerprint login could not be enabled. Please try again.",
+        );
+      }
+
+      setIsBiometricAvailable(true);
+      setIsBiometricEnabled(true);
+    } finally {
+      setBiometricLoading(false);
+    }
+  }, [user]);
 
   /* =======================================================
      DISABLE BIOMETRIC LOGIN
   ======================================================= */
 
-  const disableBiometricLogin =
-    useCallback(async (): Promise<void> => {
-      setBiometricLoading(true);
+  const disableBiometricLogin = useCallback(async (): Promise<void> => {
+    setBiometricLoading(true);
 
-      try {
-        await biometricAuth.disableBiometricLogin();
+    try {
+      await biometricAuth.disableBiometricLogin();
 
-        setIsBiometricEnabled(false);
-      } finally {
-        setBiometricLoading(false);
-      }
-    }, []);
+      setIsBiometricEnabled(false);
+    } finally {
+      setBiometricLoading(false);
+    }
+  }, []);
 
   /* =======================================================
      LOGIN WITH BIOMETRICS
   ======================================================= */
 
-  const loginWithBiometrics =
-    useCallback(async (): Promise<AuthUser> => {
-      setLoading(true);
-      setBiometricLoading(true);
+  const loginWithBiometrics = useCallback(async (): Promise<AuthUser> => {
+    setLoading(true);
+    setBiometricLoading(true);
 
-      try {
-        // Check actual device support.
-        const available =
-          await biometricAuth.isBiometricAvailable();
+    try {
+      // Check actual device support.
+      const available = await biometricAuth.isBiometricAvailable();
 
-        setIsBiometricAvailable(available);
+      setIsBiometricAvailable(available);
 
-        if (!available) {
-          setIsBiometricEnabled(false);
+      if (!available) {
+        setIsBiometricEnabled(false);
 
-          throw new Error(
-            "Fingerprint authentication is unavailable on this device.",
-          );
-        }
-
-        // Check whether the user registered biometrics.
-        const enabled =
-          await biometricAuth.isBiometricEnabled();
-
-        setIsBiometricEnabled(enabled);
-
-        if (!enabled) {
-          throw new Error(
-            "Fingerprint login has not been enabled. Please sign in with your PIN first.",
-          );
-        }
-
-        // Perform actual biometric authentication.
-        const authenticatedUser =
-          await biometricAuth.loginWithBiometrics();
-
-        setUser(authenticatedUser);
-
-        return authenticatedUser;
-      } catch (error) {
-        setUser(null);
-        throw error;
-      } finally {
-        setBiometricLoading(false);
-        setLoading(false);
+        throw new Error(
+          "Fingerprint authentication is unavailable on this device.",
+        );
       }
-    }, []);
+
+      // Check whether the user registered biometrics.
+      const enabled = await biometricAuth.isBiometricEnabled();
+
+      setIsBiometricEnabled(enabled);
+
+      if (!enabled) {
+        throw new Error(
+          "Fingerprint login has not been enabled. Please sign in with your PIN first.",
+        );
+      }
+
+      // Perform actual biometric authentication.
+      const authenticatedUser = await biometricAuth.loginWithBiometrics();
+
+      setUser(authenticatedUser);
+
+      return authenticatedUser;
+    } catch (error) {
+      console.error("Biometric login failed:", error);
+      throw error;
+    } finally {
+      setBiometricLoading(false);
+      setLoading(false);
+    }
+  }, []);
 
   /* =======================================================
      LOGOUT
@@ -525,10 +456,7 @@ export const AuthProvider = ({
       try {
         await clearLoanWidget();
       } catch (error) {
-        console.error(
-          "Loan widget cleanup failed:",
-          error,
-        );
+        console.error("Loan widget cleanup failed:", error);
       }
 
       // Preserve biometric credentials.
@@ -544,63 +472,45 @@ export const AuthProvider = ({
      REFRESH USER
   ======================================================= */
 
-  const refreshUser = useCallback(
-    async (): Promise<AuthUser | null> => {
-      const token = authApi.getToken();
+  const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
+    const token = authApi.getToken();
 
-      if (!token) {
-        setUser(null);
-        return null;
-      }
+    if (!token) {
+      setUser(null);
+      return null;
+    }
 
-      try {
-        const currentUser = await authApi.getMe();
+    try {
+      const currentUser = await authApi.getMe();
 
-        setUser(currentUser);
+      setUser(currentUser);
 
-        return currentUser;
-      } catch (error) {
-        console.error(
-          "User refresh failed:",
-          error,
-        );
+      return currentUser;
+    } catch (error) {
+      console.error("User refresh failed:", error);
 
-        setUser(null);
+      setUser(null);
 
-        return null;
-      }
-    },
-    [],
-  );
+      return null;
+    }
+  }, []);
 
   /* =======================================================
      RESET PASSWORD / PIN
   ======================================================= */
 
   const resetPassword = useCallback(
-    async (
-      token: string,
-      password: string,
-    ): Promise<string> => {
+    async (token: string, password: string): Promise<string> => {
       if (!isValidPin(password)) {
-        throw new Error(
-          "PIN must be exactly 4 digits.",
-        );
+        throw new Error("PIN must be exactly 4 digits.");
       }
 
       setLoading(true);
 
       try {
-        const response =
-          await authApi.resetPassword(
-            token,
-            password,
-          );
+        const response = await authApi.resetPassword(token, password);
 
-        return (
-          response?.message ||
-          "PIN reset successfully"
-        );
+        return response?.message || "PIN reset successfully";
       } finally {
         setLoading(false);
       }
@@ -612,25 +522,19 @@ export const AuthProvider = ({
      ROLE HELPERS
   ======================================================= */
 
-  const getRole = useCallback(
-    (): UserRole | null => {
-      return user?.role ?? null;
-    },
-    [user],
-  );
+  const getRole = useCallback((): UserRole | null => {
+    return user?.role ?? null;
+  }, [user]);
 
   const hasRole = useCallback(
-    (
-      roles: UserRole | readonly UserRole[],
-    ): boolean => {
+    (roles: UserRole | readonly UserRole[]): boolean => {
       if (!user) {
         return false;
       }
 
-      const allowedRoles: readonly UserRole[] =
-        Array.isArray(roles)
-          ? roles as readonly UserRole[]
-          : [roles as UserRole];
+      const allowedRoles: readonly UserRole[] = Array.isArray(roles)
+        ? (roles as readonly UserRole[])
+        : [roles as UserRole];
 
       return allowedRoles.includes(user.role);
     },
@@ -642,10 +546,7 @@ export const AuthProvider = ({
   ======================================================= */
 
   const isAdmin = useCallback((): boolean => {
-    return (
-      user?.role === "admin" ||
-      user?.role === "super_admin"
-    );
+    return user?.role === "admin" || user?.role === "super_admin";
   }, [user]);
 
   /* =======================================================
@@ -692,9 +593,7 @@ export const AuthProvider = ({
      AUTHENTICATED STATE
   ======================================================= */
 
-  const isAuthenticated = Boolean(
-    user && authApi.getToken(),
-  );
+  const isAuthenticated = Boolean(user && authApi.getToken());
 
   /* =======================================================
      CONTEXT VALUE
@@ -770,11 +669,7 @@ export const AuthProvider = ({
      PROVIDER
   ======================================================= */
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 /* =========================================================
@@ -785,9 +680,7 @@ export const useAuth = (): AuthContextValue => {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error(
-      "useAuth must be used within an AuthProvider",
-    );
+    throw new Error("useAuth must be used within an AuthProvider");
   }
 
   return context;

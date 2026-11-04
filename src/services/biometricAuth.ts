@@ -13,12 +13,40 @@ import authApi, { type AuthUser } from "./AuthService";
 const TOKEN_KEY = "menumoney_biometric_token";
 const ENABLED_KEY = "menumoney_biometric_enabled";
 
+const LOG = "[Biometric Service]";
+
+const logStart = (operation: string): number => {
+  console.log(`${LOG} START: ${operation}`);
+  return Date.now();
+};
+
+const logSuccess = (operation: string, start: number, result?: unknown): void => {
+  console.log(`${LOG} SUCCESS: ${operation}`, {
+    duration: `${Date.now() - start}ms`,
+    result,
+  });
+};
+
+const logError = (operation: string, start: number, error: unknown): void => {
+  console.error(`${LOG} FAILED: ${operation}`, {
+    duration: `${Date.now() - start}ms`,
+    error,
+  });
+};
+
 /* =========================================================
    NATIVE PLATFORM CHECK
 ========================================================= */
 
 const ensureNative = (): void => {
-  if (!Capacitor.isNativePlatform()) {
+  console.log(`${LOG} Checking native platform...`);
+
+  const isNative = Capacitor.isNativePlatform();
+
+  console.log(`${LOG} Native platform:`, isNative);
+  console.log(`${LOG} Platform:`, Capacitor.getPlatform());
+
+  if (!isNative) {
     throw new Error(
       "Biometric login is only available in the mobile app.",
     );
@@ -30,25 +58,56 @@ const ensureNative = (): void => {
 ========================================================= */
 
 const authenticateFingerprint = async (): Promise<void> => {
-  ensureNative();
+  const operation = "authenticateFingerprint";
+  const start = logStart(operation);
 
-  const result = await BiometricAuth.checkBiometry();
+  try {
+    ensureNative();
 
-  if (!result.isAvailable) {
-    throw new Error(
-      result.reason ||
-        "No enrolled fingerprint or supported biometric is available.",
-    );
+    console.log(`${LOG} Checking device biometric capability...`);
+
+    const checkStart = Date.now();
+    const result = await BiometricAuth.checkBiometry();
+
+    console.log(`${LOG} checkBiometry completed:`, {
+      duration: `${Date.now() - checkStart}ms`,
+      isAvailable: result.isAvailable,
+      biometryType: result.biometryType,
+      biometryTypes: result.biometryTypes,
+      deviceIsSecure: result.deviceIsSecure,
+      reason: result.reason,
+      code: result.code,
+    });
+
+    if (!result.isAvailable) {
+      throw new Error(
+        result.reason ||
+          "No enrolled fingerprint or supported biometric is available.",
+      );
+    }
+
+    console.log(`${LOG} Opening native fingerprint prompt...`);
+
+    const authStart = Date.now();
+
+    await BiometricAuth.authenticate({
+      reason: "Verify your identity to access MenuMoney.",
+      cancelTitle: "Cancel",
+      allowDeviceCredential: false,
+      androidTitle: "MenuMoney fingerprint login",
+      androidSubtitle: "Confirm your identity",
+      androidConfirmationRequired: true,
+    });
+
+    console.log(`${LOG} Native fingerprint prompt completed:`, {
+      duration: `${Date.now() - authStart}ms`,
+    });
+
+    logSuccess(operation, start);
+  } catch (error) {
+    logError(operation, start, error);
+    throw error;
   }
-
-  await BiometricAuth.authenticate({
-    reason: "Verify your identity to access MenuMoney.",
-    cancelTitle: "Cancel",
-    allowDeviceCredential: false,
-    androidTitle: "MenuMoney fingerprint login",
-    androidSubtitle: "Confirm your identity",
-    androidConfirmationRequired: true,
-  });
 };
 
 /* =========================================================
@@ -56,24 +115,60 @@ const authenticateFingerprint = async (): Promise<void> => {
 ========================================================= */
 
 const isBiometricAvailable = async (): Promise<boolean> => {
-  const status = await getBiometricStatus();
-  return status.isAvailable;
+  const operation = "isBiometricAvailable";
+  const start = logStart(operation);
+
+  try {
+    const status = await getBiometricStatus();
+
+    logSuccess(operation, start, {
+      available: status.isAvailable,
+    });
+
+    return status.isAvailable;
+  } catch (error) {
+    logError(operation, start, error);
+    throw error;
+  }
 };
 
 const getBiometricStatus = async (): Promise<CheckBiometryResult> => {
-  if (!Capacitor.isNativePlatform()) {
-    return {
-      isAvailable: false,
-      strongBiometryIsAvailable: false,
-      biometryType: BiometryType.none,
-      biometryTypes: [],
-      deviceIsSecure: false,
-      reason: "Biometric login requires the installed mobile app.",
-      code: BiometryErrorType.biometryNotAvailable,
-    };
-  }
+  const operation = "getBiometricStatus";
+  const start = logStart(operation);
 
-  return BiometricAuth.checkBiometry();
+  try {
+    if (!Capacitor.isNativePlatform()) {
+      console.warn(`${LOG} Not running on a native platform`);
+
+      return {
+        isAvailable: false,
+        strongBiometryIsAvailable: false,
+        biometryType: BiometryType.none,
+        biometryTypes: [],
+        deviceIsSecure: false,
+        reason: "Biometric login requires the installed mobile app.",
+        code: BiometryErrorType.biometryNotAvailable,
+      };
+    }
+
+    console.log(`${LOG} Calling BiometricAuth.checkBiometry()...`);
+
+    const status = await BiometricAuth.checkBiometry();
+
+    logSuccess(operation, start, {
+      isAvailable: status.isAvailable,
+      biometryType: status.biometryType,
+      biometryTypes: status.biometryTypes,
+      deviceIsSecure: status.deviceIsSecure,
+      reason: status.reason,
+      code: status.code,
+    });
+
+    return status;
+  } catch (error) {
+    logError(operation, start, error);
+    throw error;
+  }
 };
 
 /* =========================================================
@@ -81,18 +176,47 @@ const getBiometricStatus = async (): Promise<CheckBiometryResult> => {
 ========================================================= */
 
 const isBiometricEnabled = async (): Promise<boolean> => {
-  if (!Capacitor.isNativePlatform()) {
-    return false;
+  const operation = "isBiometricEnabled";
+  const start = logStart(operation);
+
+  try {
+    if (!Capacitor.isNativePlatform()) {
+      console.warn(`${LOG} Cannot check secure storage outside native app`);
+      return false;
+    }
+
+    console.log(`${LOG} Reading biometric enabled flag...`);
+
+    const enabledStart = Date.now();
+    const enabled = await SecureStorage.get(ENABLED_KEY);
+
+    console.log(`${LOG} Enabled flag read completed:`, {
+      duration: `${Date.now() - enabledStart}ms`,
+      enabled,
+    });
+
+    console.log(`${LOG} Reading saved biometric token...`);
+
+    const tokenStart = Date.now();
+    const token = await SecureStorage.get(TOKEN_KEY);
+
+    console.log(`${LOG} Token read completed:`, {
+      duration: `${Date.now() - tokenStart}ms`,
+      tokenExists: typeof token === "string" && token.length > 0,
+    });
+
+    const result =
+      enabled === true &&
+      typeof token === "string" &&
+      token.length > 0;
+
+    logSuccess(operation, start, { enabled: result });
+
+    return result;
+  } catch (error) {
+    logError(operation, start, error);
+    throw error;
   }
-
-  const enabled = await SecureStorage.get(ENABLED_KEY);
-  const token = await SecureStorage.get(TOKEN_KEY);
-
-  return (
-    enabled === true &&
-    typeof token === "string" &&
-    token.length > 0
-  );
 };
 
 /* =========================================================
@@ -100,21 +224,41 @@ const isBiometricEnabled = async (): Promise<boolean> => {
 ========================================================= */
 
 const enableBiometricLogin = async (): Promise<void> => {
-  ensureNative();
+  const operation = "enableBiometricLogin";
+  const start = logStart(operation);
 
-  const token = authApi.getToken();
+  try {
+    ensureNative();
 
-  if (!token) {
-    throw new Error(
-      "Please log in with your PIN before enabling fingerprint login.",
-    );
+    console.log(`${LOG} Retrieving current authentication token...`);
+
+    const token = authApi.getToken();
+
+    console.log(`${LOG} Authentication token exists:`, !!token);
+
+    if (!token) {
+      throw new Error(
+        "Please log in with your PIN before enabling fingerprint login.",
+      );
+    }
+
+    console.log(`${LOG} Requesting fingerprint verification...`);
+
+    await authenticateFingerprint();
+
+    console.log(`${LOG} Saving biometric token...`);
+
+    await SecureStorage.set(TOKEN_KEY, token);
+
+    console.log(`${LOG} Saving biometric enabled flag...`);
+
+    await SecureStorage.set(ENABLED_KEY, true);
+
+    logSuccess(operation, start);
+  } catch (error) {
+    logError(operation, start, error);
+    throw error;
   }
-
-  // Verify the user before saving the credential.
-  await authenticateFingerprint();
-
-  await SecureStorage.set(TOKEN_KEY, token);
-  await SecureStorage.set(ENABLED_KEY, true);
 };
 
 /* =========================================================
@@ -122,43 +266,79 @@ const enableBiometricLogin = async (): Promise<void> => {
 ========================================================= */
 
 const loginWithBiometrics = async (): Promise<AuthUser> => {
-  ensureNative();
+  const operation = "loginWithBiometrics";
+  const start = logStart(operation);
 
-  const enabled = await isBiometricEnabled();
+  try {
+    ensureNative();
 
-  if (!enabled) {
-    throw new Error(
-      "Fingerprint login has not been enabled. Please log in with your PIN.",
-    );
+    console.log(`${LOG} Checking whether biometric login is enabled...`);
+
+    const enabled = await isBiometricEnabled();
+
+    console.log(`${LOG} Biometric login enabled:`, enabled);
+
+    if (!enabled) {
+      throw new Error(
+        "Fingerprint login has not been enabled. Please log in with your PIN.",
+      );
+    }
+
+    console.log(`${LOG} Starting local fingerprint verification...`);
+
+    await authenticateFingerprint();
+
+    console.log(`${LOG} Fingerprint verified. Reading saved token...`);
+
+    const tokenStart = Date.now();
+    const token = await SecureStorage.get(TOKEN_KEY);
+
+    console.log(`${LOG} Saved token read completed:`, {
+      duration: `${Date.now() - tokenStart}ms`,
+      tokenExists: typeof token === "string" && token.length > 0,
+    });
+
+    if (typeof token !== "string" || !token) {
+      throw new Error(
+        "Saved login session not found. Please log in with your PIN.",
+      );
+    }
+
+    console.log(`${LOG} Validating saved session with backend...`);
+
+    const apiStart = Date.now();
+
+    const authenticatedUser =
+      await authApi.restoreBiometricSession(token);
+
+    console.log(`${LOG} Backend session validation completed:`, {
+      duration: `${Date.now() - apiStart}ms`,
+      userAuthenticated: !!authenticatedUser,
+    });
+
+    if (!authenticatedUser) {
+      throw new Error(
+        "Your saved session is invalid. Please log in with your PIN.",
+      );
+    }
+
+    console.log(`${LOG} Checking for refreshed authentication token...`);
+
+    const currentToken = authApi.getToken();
+
+    if (currentToken && currentToken !== token) {
+      console.log(`${LOG} Updating saved biometric token...`);
+
+      await SecureStorage.set(TOKEN_KEY, currentToken);
+    }
+
+    logSuccess(operation, start);
+
+    return authenticatedUser;
+  } catch (error) {
+    logError(operation, start, error);
+    throw error;
   }
-
-  // Verify the user locally first.
-  await authenticateFingerprint();
-
-  const token = await SecureStorage.get(TOKEN_KEY);
-
-  if (typeof token !== "string" || !token) {
-    throw new Error(
-      "Saved login session not found. Please log in with your PIN.",
-    );
-  }
-
-  // Validate the saved session with the backend.
-  const authenticatedUser =
-    await authApi.restoreBiometricSession(token);
-
-  if (!authenticatedUser) {
-    throw new Error(
-      "Your saved session is invalid. Please log in with your PIN.",
-    );
-  }
-
-  const currentToken = authApi.getToken();
-  if (currentToken && currentToken !== token) {
-    await SecureStorage.set(TOKEN_KEY, currentToken);
-  }
-
-  return authenticatedUser;
 };
 
 /* =========================================================
@@ -166,13 +346,29 @@ const loginWithBiometrics = async (): Promise<AuthUser> => {
 ========================================================= */
 
 const disableBiometricLogin = async (): Promise<void> => {
-  ensureNative();
+  const operation = "disableBiometricLogin";
+  const start = logStart(operation);
 
-  // Require identity verification before removing credentials.
-  await authenticateFingerprint();
+  try {
+    ensureNative();
 
-  await SecureStorage.remove(TOKEN_KEY);
-  await SecureStorage.remove(ENABLED_KEY);
+    console.log(`${LOG} Requesting fingerprint verification...`);
+
+    await authenticateFingerprint();
+
+    console.log(`${LOG} Removing saved biometric token...`);
+
+    await SecureStorage.remove(TOKEN_KEY);
+
+    console.log(`${LOG} Removing biometric enabled flag...`);
+
+    await SecureStorage.remove(ENABLED_KEY);
+
+    logSuccess(operation, start);
+  } catch (error) {
+    logError(operation, start, error);
+    throw error;
+  }
 };
 
 /* =========================================================

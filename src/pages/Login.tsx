@@ -1,20 +1,8 @@
+import { useEffect, useState, type FormEvent } from "react";
 
-import {
-  useEffect,
-  useState,
-  type FormEvent,
-} from "react";
+import { Eye, EyeOff, Fingerprint } from "lucide-react";
 
-import {
-  Eye,
-  EyeOff,
-  Fingerprint,
-} from "lucide-react";
-
-import {
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { toast } from "react-toastify";
 
@@ -25,10 +13,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showBiometricSetup, setShowBiometricSetup] =
-    useState(false);
-  const [biometricStatusMessage, setBiometricStatusMessage] =
-    useState("");
+  const [showBiometricSetup, setShowBiometricSetup] = useState(false);
+  const [biometricStatusMessage, setBiometricStatusMessage] = useState("");
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,42 +33,29 @@ export default function Login() {
     checkBiometricAvailability,
   } = useAuth();
 
-  const busy =
-    submitting || loading || biometricLoading;
+  const busy = submitting || loading || biometricLoading;
 
   /* =========================================================
      REDIRECT AFTER AUTHENTICATION
   ========================================================= */
 
   useEffect(() => {
-    if (
-      !isAuthenticated ||
-      !user ||
-      submitting ||
-      showBiometricSetup
-    ) {
+    if (!isAuthenticated || !user || submitting || showBiometricSetup) {
       return;
     }
 
     const from = location.state?.from?.pathname;
 
     const isAdministrator =
-      user.role === "admin" ||
-      user.role === "super_admin";
+      user.role === "admin" || user.role === "super_admin";
 
     const requestedPath =
-      typeof from === "string" &&
-      from.startsWith("/") &&
-      !from.startsWith("//")
+      typeof from === "string" && from.startsWith("/") && !from.startsWith("//")
         ? from
         : null;
 
     const destination =
-      requestedPath &&
-      (
-        !requestedPath.startsWith("/admin") ||
-        isAdministrator
-      )
+      requestedPath && (!requestedPath.startsWith("/admin") || isAdministrator)
         ? requestedPath
         : isAdministrator
           ? "/admin"
@@ -122,11 +95,9 @@ export default function Login() {
         message?: unknown;
       };
 
-      const responseMessage =
-        authError.response?.data?.message;
+      const responseMessage = authError.response?.data?.message;
 
-      const responseError =
-        authError.response?.data?.error;
+      const responseError = authError.response?.data?.error;
 
       if (typeof responseMessage === "string") {
         return responseMessage;
@@ -149,9 +120,7 @@ export default function Login() {
   ========================================================= */
 
   const handlePinChange = (value: string): void => {
-    setPassword(
-      value.replace(/\D/g, "").slice(0, 4),
-    );
+    setPassword(value.replace(/\D/g, "").slice(0, 4));
   };
 
   /* =========================================================
@@ -170,9 +139,7 @@ export default function Login() {
     const cleanIdentifier = identifier.trim();
 
     if (!cleanIdentifier) {
-      toast.error(
-        "Please enter your email or phone number.",
-      );
+      toast.error("Please enter your email or phone number.");
       return;
     }
 
@@ -191,14 +158,10 @@ export default function Login() {
 
       toast.success("Login successful.");
 
-      const biometricStatus =
-        await checkBiometricAvailability();
+      const biometricStatus = await checkBiometricAvailability();
       setBiometricStatusMessage(biometricStatus.error ?? "");
 
-      if (
-        biometricStatus.available &&
-        !biometricStatus.enabled
-      ) {
+      if (biometricStatus.available && !biometricStatus.enabled) {
         setShowBiometricSetup(true);
       }
     } catch (error: unknown) {
@@ -213,15 +176,29 @@ export default function Login() {
   ========================================================= */
 
   const handleBiometricLogin = async (): Promise<void> => {
+    console.log("[Biometric Login] Button clicked");
+
     if (busy) {
+      console.log("[Biometric Login] Aborted: app is busy");
       return;
     }
 
     try {
-      const biometricStatus =
-        await checkBiometricAvailability();
+      console.log("[Biometric Login] Checking biometric availability...");
+
+      const biometricStatus = await checkBiometricAvailability();
+
+      console.log(
+        "[Biometric Login] Availability check result:",
+        biometricStatus,
+      );
 
       if (!biometricStatus.available) {
+        console.warn(
+          "[Biometric Login] Biometrics unavailable:",
+          biometricStatus.error,
+        );
+
         toast.info(
           biometricStatus.error ||
             "Fingerprint login is unavailable. Enroll biometrics in your device settings.",
@@ -229,23 +206,42 @@ export default function Login() {
         return;
       }
 
+      console.log("[Biometric Login] Biometrics are available");
+
       if (!biometricStatus.enabled) {
+        console.warn("[Biometric Login] Biometric login is not enabled");
+
         if (isAuthenticated) {
+          console.log(
+            "[Biometric Login] User is authenticated. Opening biometric setup.",
+          );
           setShowBiometricSetup(true);
         }
-        toast.info(
-          "Sign in with your PIN to enable fingerprint login.",
-        );
+
+        toast.info("Sign in with your PIN to enable fingerprint login.");
         return;
       }
 
+      console.log(
+        "[Biometric Login] Biometric login is enabled. Starting authentication...",
+      );
+
       await loginWithBiometrics();
 
-      toast.success(
-        "Fingerprint authentication successful.",
-      );
+      console.log("[Biometric Login] Authentication completed successfully");
+
+      toast.success("Fingerprint authentication successful.");
     } catch (error: unknown) {
+      console.error("[Biometric Login] Authentication failed:", error);
+
+      if (error instanceof Error) {
+        console.error("[Biometric Login] Error message:", error.message);
+        console.error("[Biometric Login] Error stack:", error.stack);
+      }
+
       toast.error(getErrorMessage(error));
+    } finally {
+      console.log("[Biometric Login] Handler finished");
     }
   };
 
@@ -261,9 +257,7 @@ export default function Login() {
     try {
       await enableBiometricLogin();
 
-      toast.success(
-        "Fingerprint login is now enabled.",
-      );
+      toast.success("Fingerprint login is now enabled.");
 
       setShowBiometricSetup(false);
     } catch (error: unknown) {
@@ -281,13 +275,9 @@ export default function Login() {
         <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl">
           <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-orange-500" />
 
-          <h2 className="text-xl font-semibold text-gray-800">
-            Loading
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-800">Loading</h2>
 
-          <p className="mt-2 text-sm text-gray-500">
-            Please wait...
-          </p>
+          <p className="mt-2 text-sm text-gray-500">Please wait...</p>
         </div>
       </div>
     );
@@ -300,23 +290,17 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-8">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-
         {/* BRAND */}
 
         <h1 className="mb-2 text-center text-3xl font-bold text-orange-500">
           Lovest
         </h1>
 
-        <p className="mb-8 text-center text-gray-500">
-          Welcome back
-        </p>
+        <p className="mb-8 text-center text-gray-500">Welcome back</p>
 
         {/* LOGIN FORM */}
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5"
-        >
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* EMAIL OR PHONE */}
 
           <div>
@@ -333,9 +317,7 @@ export default function Login() {
               type="text"
               placeholder="Enter phone number or email"
               value={identifier}
-              onChange={(event) =>
-                setIdentifier(event.target.value)
-              }
+              onChange={(event) => setIdentifier(event.target.value)}
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
@@ -359,17 +341,13 @@ export default function Login() {
               <input
                 id="password"
                 name="password"
-                type={
-                  showPassword ? "text" : "password"
-                }
+                type={showPassword ? "text" : "password"}
                 inputMode="numeric"
                 maxLength={4}
                 pattern="[0-9]{4}"
                 placeholder="Enter 4-digit PIN"
                 value={password}
-                onChange={(event) =>
-                  handlePinChange(event.target.value)
-                }
+                onChange={(event) => handlePinChange(event.target.value)}
                 autoComplete="current-password"
                 disabled={busy}
                 required
@@ -378,20 +356,12 @@ export default function Login() {
 
               <button
                 type="button"
-                aria-label={
-                  showPassword ? "Hide PIN" : "Show PIN"
-                }
-                onClick={() =>
-                  setShowPassword((previous) => !previous)
-                }
+                aria-label={showPassword ? "Hide PIN" : "Show PIN"}
+                onClick={() => setShowPassword((previous) => !previous)}
                 disabled={busy}
                 className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
               >
-                {showPassword ? (
-                  <EyeOff size={20} />
-                ) : (
-                  <Eye size={20} />
-                )}
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
 
@@ -407,9 +377,7 @@ export default function Login() {
             disabled={busy || password.length !== 4}
             className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
-            {submitting || loading
-              ? "Signing in..."
-              : "Login"}
+            {submitting || loading ? "Signing in..." : "Login"}
           </button>
         </form>
 
@@ -418,9 +386,7 @@ export default function Login() {
         <div className="my-6 flex items-center gap-3">
           <div className="h-px flex-1 bg-gray-200" />
 
-          <span className="text-xs text-gray-400">
-            OR
-          </span>
+          <span className="text-xs text-gray-400">OR</span>
 
           <div className="h-px flex-1 bg-gray-200" />
         </div>
@@ -453,9 +419,9 @@ export default function Login() {
           {biometricStatusMessage ||
             (!isBiometricAvailable
               ? "Biometric authentication is not currently available on this device."
-            : !isBiometricEnabled
-              ? "Sign in with your PIN first to enable fingerprint login."
-              : "Authenticate securely using your device biometrics.")}
+              : !isBiometricEnabled
+                ? "Sign in with your PIN first to enable fingerprint login."
+                : "Authenticate securely using your device biometrics.")}
         </p>
 
         {/* FORGOT PIN */}
@@ -473,7 +439,6 @@ export default function Login() {
 
         <p className="mt-6 text-center text-sm text-gray-600">
           Don't have an account?{" "}
-
           <button
             type="button"
             onClick={() => navigate("/register")}
@@ -509,9 +474,8 @@ export default function Login() {
             </h2>
 
             <p className="mt-2 text-sm text-gray-600">
-              Use your device biometrics to sign in securely
-              next time. Your login session is stored in
-              secure device storage.
+              Use your device biometrics to sign in securely next time. Your
+              login session is stored in secure device storage.
             </p>
 
             <button

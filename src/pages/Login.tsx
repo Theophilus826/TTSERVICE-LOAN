@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Eye, EyeOff, Fingerprint } from "lucide-react";
 
@@ -18,6 +18,7 @@ export default function Login() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const biometricCheckRef = useRef(false);
 
   const {
     user,
@@ -76,7 +77,17 @@ export default function Login() {
   ========================================================= */
 
   useEffect(() => {
-    void checkBiometricAvailability();
+    if (biometricCheckRef.current) return;
+
+    biometricCheckRef.current = true;
+
+    void checkBiometricAvailability()
+      .then((status) => {
+        setBiometricStatusMessage(status.error ?? "");
+      })
+      .catch((error) => {
+        console.error("[Login] Biometric initialization failed:", error);
+      });
   }, [checkBiometricAvailability]);
 
   /* =========================================================
@@ -429,9 +440,7 @@ export default function Login() {
           <span>
             {biometricLoading
               ? "Verifying fingerprint..."
-              : isAuthenticated &&
-                  isBiometricAvailable &&
-                  !isBiometricEnabled
+              : isAuthenticated && isBiometricAvailable && !isBiometricEnabled
                 ? "Enable Fingerprint Login"
                 : "Login with Fingerprint"}
           </span>

@@ -221,15 +221,17 @@ export default function Login() {
       console.log("[Biometric Login] Biometrics are available");
 
       if (!biometricStatus.enabled) {
-        console.warn("[Biometric Login] Biometric login is not enabled");
-
         if (isAuthenticated) {
           console.log(
-            "[Biometric Login] User is authenticated. Opening biometric setup.",
+            "[Biometric Login] User is authenticated. Opening biometric enrollment.",
           );
           setShowBiometricSetup(true);
+          return;
         }
 
+        console.info(
+          "[Biometric Login] Enrollment requires an authenticated PIN session.",
+        );
         toast.info("Sign in with your PIN to enable fingerprint login.");
         return;
       }
@@ -407,7 +409,11 @@ export default function Login() {
           type="button"
           onClick={handleBiometricLogin}
           disabled={busy}
-          aria-label="Login with fingerprint"
+          aria-label={
+            isAuthenticated && isBiometricAvailable && !isBiometricEnabled
+              ? "Enable fingerprint login"
+              : "Login with fingerprint"
+          }
           className="group flex w-full items-center justify-center gap-3 rounded-xl border-2 border-orange-200 bg-orange-50 py-4 font-semibold text-orange-600 transition duration-200 hover:border-orange-400 hover:bg-orange-100 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {biometricLoading ? (
@@ -423,7 +429,11 @@ export default function Login() {
           <span>
             {biometricLoading
               ? "Verifying fingerprint..."
-              : "Login with Fingerprint"}
+              : isAuthenticated &&
+                  isBiometricAvailable &&
+                  !isBiometricEnabled
+                ? "Enable Fingerprint Login"
+                : "Login with Fingerprint"}
           </span>
         </button>
 

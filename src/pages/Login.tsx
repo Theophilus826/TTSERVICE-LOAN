@@ -491,39 +491,56 @@ export default function Login() {
             aria-labelledby="biometric-setup-title"
             className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl"
           >
-            <Fingerprint
-              size={42}
-              aria-hidden="true"
-              className="mx-auto text-orange-500"
-            />
+            {/* Animated fingerprint */}
+            <div className="relative mx-auto flex h-24 w-24 items-center justify-center">
+              {biometricLoading && (
+                <>
+                  <div className="absolute inset-0 rounded-full border-2 border-orange-200 animate-ping opacity-50" />
+                  <div className="absolute inset-2 rounded-full border border-orange-300 animate-pulse" />
+                </>
+              )}
+
+              <Fingerprint
+                size={biometricLoading ? 65 : 48}
+                aria-hidden="true"
+                className={`relative z-10 text-orange-500 transition-all duration-500 ${
+                  biometricLoading ? "scale-110 animate-pulse" : "scale-100"
+                }`}
+              />
+            </div>
 
             <h2
               id="biometric-setup-title"
               className="mt-4 text-xl font-bold text-gray-900"
             >
-              Enable fingerprint login?
+              {biometricLoading
+                ? "Scanning fingerprint..."
+                : "Enable fingerprint login?"}
             </h2>
 
             <p className="mt-2 text-sm text-gray-600">
-              Use your device biometrics to sign in securely next time. Your
-              login session is stored in secure device storage.
+              {biometricLoading
+                ? "Place your finger on your device's fingerprint sensor. Verifying your identity..."
+                : "Use your device biometrics to sign in securely next time. Your login session is stored in secure device storage."}
             </p>
 
             <button
               type="button"
               onClick={handleEnableBiometrics}
-              disabled={busy}
+              disabled={busy || biometricLoading}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {biometricLoading ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-200 border-t-white" />
+                <>
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-200 border-t-white" />
+                  Scanning fingerprint...
+                </>
               ) : (
-                <Fingerprint size={21} />
+                <>
+                  <Fingerprint size={21} />
+                  Enable fingerprint login
+                </>
               )}
-
-              {biometricLoading
-                ? "Verifying fingerprint..."
-                : "Enable fingerprint login"}
             </button>
 
             <button

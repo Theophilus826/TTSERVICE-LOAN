@@ -1,4 +1,4 @@
-
+import axios from "axios";
 import API from "./Api";
 
 /* =========================================================
@@ -28,11 +28,7 @@ export type UserRole =
    ACCOUNT STATUS
 ========================================================= */
 
-export type AccountStatus =
-  | "active"
-  | "suspended"
-  | "blocked"
-  | "closed";
+export type AccountStatus = "active" | "suspended" | "blocked" | "closed";
 
 /* =========================================================
    KYC STATUS
@@ -241,9 +237,7 @@ interface GenericResponse<T = unknown> {
  * 12345 -> invalid
  * abcd -> invalid
  */
-const isValidPin = (
-  pin: string,
-): boolean => {
+const isValidPin = (pin: string): boolean => {
   return /^\d{4}$/.test(pin);
 };
 
@@ -251,20 +245,13 @@ const isValidPin = (
  * Validate a PIN and throw a useful
  * error when it is invalid.
  */
-const validatePin = (
-  pin: string,
-  fieldName = "PIN",
-): void => {
+const validatePin = (pin: string, fieldName = "PIN"): void => {
   if (!pin) {
-    throw new Error(
-      `${fieldName} is required.`,
-    );
+    throw new Error(`${fieldName} is required.`);
   }
 
   if (!isValidPin(pin)) {
-    throw new Error(
-      `${fieldName} must be exactly 4 digits.`,
-    );
+    throw new Error(`${fieldName} must be exactly 4 digits.`);
   }
 };
 
@@ -272,9 +259,7 @@ const validatePin = (
    NORMALIZE ROLE
 ========================================================= */
 
-const normalizeRole = (
-  data: BackendUser,
-): UserRole => {
+const normalizeRole = (data: BackendUser): UserRole => {
   /*
    * Prefer the explicit role returned
    * by the backend.
@@ -300,50 +285,32 @@ const normalizeRole = (
    ADMIN ROLE CHECK
 ========================================================= */
 
-const roleIsAdmin = (
-  role: UserRole,
-): boolean => {
-  return (
-    role === "admin" ||
-    role === "super_admin"
-  );
+const roleIsAdmin = (role: UserRole): boolean => {
+  return role === "admin" || role === "super_admin";
 };
 
 /* =========================================================
    BUILD AUTH USER
 ========================================================= */
 
-const buildAuthUser = (
-  data: BackendUser,
-  token: string,
-): AuthUser => {
+const buildAuthUser = (data: BackendUser, token: string): AuthUser => {
   if (!data?._id) {
-    throw new Error(
-      "Authenticated user ID was not returned.",
-    );
+    throw new Error("Authenticated user ID was not returned.");
   }
 
   if (!token) {
-    throw new Error(
-      "Authentication token was not returned.",
-    );
+    throw new Error("Authentication token was not returned.");
   }
 
   const role = normalizeRole(data);
 
-  const fullName =
-    data.name?.trim() || "User";
+  const fullName = data.name?.trim() || "User";
 
-  const [firstNameFromName, ...lastNameParts] =
-    fullName.split(/\s+/);
+  const [firstNameFromName, ...lastNameParts] = fullName.split(/\s+/);
 
-  const firstName =
-    data.firstName?.trim() ||
-    firstNameFromName || "User";
+  const firstName = data.firstName?.trim() || firstNameFromName || "User";
 
-  const lastName =
-    data.lastName?.trim() ||
-    lastNameParts.join(" ") || "";
+  const lastName = data.lastName?.trim() || lastNameParts.join(" ") || "";
 
   return {
     _id: String(data._id),
@@ -354,66 +321,45 @@ const buildAuthUser = (
 
     lastName,
 
-    email:
-      data.email ?? null,
+    email: data.email ?? null,
 
-    phone:
-      data.phone ?? null,
+    phone: data.phone ?? null,
 
-    avatar:
-      data.avatar ?? null,
+    avatar: data.avatar ?? null,
 
     token,
 
     role,
 
-    isAdmin:
-      roleIsAdmin(role),
+    isAdmin: roleIsAdmin(role),
 
-    coins:
-      data.coins ?? 0,
+    coins: data.coins ?? 0,
 
-    isVerified:
-      data.isVerified ?? false,
+    isVerified: data.isVerified ?? false,
 
-    emailVerified:
-      data.emailVerified ?? false,
+    emailVerified: data.emailVerified ?? false,
 
-    phoneVerified:
-      data.phoneVerified ?? false,
+    phoneVerified: data.phoneVerified ?? false,
 
-    online:
-      data.online ?? false,
+    online: data.online ?? false,
 
-    lastActive:
-      data.lastActive,
+    lastActive: data.lastActive,
 
-    lastLoginAt:
-      data.lastLoginAt ?? null,
+    lastLoginAt: data.lastLoginAt ?? null,
 
-    accountStatus:
-      data.accountStatus ??
-      "active",
+    accountStatus: data.accountStatus ?? "active",
 
-    kycStatus:
-      data.kycStatus ??
-      "not_started",
+    kycStatus: data.kycStatus ?? "not_started",
 
-    borrowerStatus:
-      data.borrowerStatus ??
-      "new",
+    borrowerStatus: data.borrowerStatus ?? "new",
 
-    referralCode:
-      data.referralCode,
+    referralCode: data.referralCode,
 
-    referredBy:
-      data.referredBy ?? null,
+    referredBy: data.referredBy ?? null,
 
-    createdAt:
-      data.createdAt,
+    createdAt: data.createdAt,
 
-    updatedAt:
-      data.updatedAt,
+    updatedAt: data.updatedAt,
   };
 };
 
@@ -421,29 +367,14 @@ const buildAuthUser = (
    SAVE AUTH
 ========================================================= */
 
-const saveAuth = (
-  data: BackendUser,
-  token: string,
-): AuthUser => {
-  const user = buildAuthUser(
-    data,
-    token,
-  );
+const saveAuth = (data: BackendUser, token: string): AuthUser => {
+  const user = buildAuthUser(data, token);
 
-  localStorage.setItem(
-    TOKEN_KEY,
-    user.token,
-  );
+  localStorage.setItem(TOKEN_KEY, user.token);
 
-  localStorage.setItem(
-    USER_KEY,
-    JSON.stringify(user),
-  );
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 
-  localStorage.setItem(
-    USER_ID_KEY,
-    user._id,
-  );
+  localStorage.setItem(USER_ID_KEY, user._id);
 
   return user;
 };
@@ -453,17 +384,11 @@ const saveAuth = (
 ========================================================= */
 
 const clearAuth = (): void => {
-  localStorage.removeItem(
-    TOKEN_KEY,
-  );
+  localStorage.removeItem(TOKEN_KEY);
 
-  localStorage.removeItem(
-    USER_KEY,
-  );
+  localStorage.removeItem(USER_KEY);
 
-  localStorage.removeItem(
-    USER_ID_KEY,
-  );
+  localStorage.removeItem(USER_ID_KEY);
 };
 
 /* =========================================================
@@ -480,9 +405,7 @@ const clearAuth = (): void => {
  *
  * Spaces, "-", "(", ")" are also removed.
  */
-const normalizeNigerianPhone = (
-  phone: string,
-): string => {
+const normalizeNigerianPhone = (phone: string): string => {
   let value = phone.trim();
 
   /*
@@ -496,7 +419,7 @@ const normalizeNigerianPhone = (
    */
   if (value.startsWith("0")) {
     value = `234${value.slice(1)}`;
-  }
+  } else if (
 
   /*
    * 8012345678
@@ -505,7 +428,6 @@ const normalizeNigerianPhone = (
    *
    * -> 2348012345678
    */
-  else if (
     value.startsWith("7") ||
     value.startsWith("8") ||
     value.startsWith("9")
@@ -528,84 +450,53 @@ const normalizeNigerianPhone = (
    VALIDATE NIGERIAN PHONE
 ========================================================= */
 
-const isValidNigerianPhone = (
-  phone: string,
-): boolean => {
-  const normalized =
-    normalizeNigerianPhone(phone);
+const isValidNigerianPhone = (phone: string): boolean => {
+  const normalized = normalizeNigerianPhone(phone);
 
-  return /^\+234[789]\d{9}$/.test(
-    normalized,
-  );
+  return /^\+234[789]\d{9}$/.test(normalized);
 };
 
 /* =========================================================
    REGISTER
 ========================================================= */
 
-
-
-const register = async (
-  userData: RegisterData,
-): Promise<AuthUser> => {
+const register = async (userData: RegisterData): Promise<AuthUser> => {
   /* -------------------------------------------------------
      VALIDATE PIN
   ------------------------------------------------------- */
 
-  validatePin(
-    userData.password,
-    "PIN",
-  );
+  validatePin(userData.password, "PIN");
 
-  validatePin(
-    userData.confirmPassword,
-    "Confirm PIN",
-  );
+  validatePin(userData.confirmPassword, "Confirm PIN");
 
-  if (
-    userData.password !==
-    userData.confirmPassword
-  ) {
-    throw new Error(
-      "PINs do not match.",
-    );
+  if (userData.password !== userData.confirmPassword) {
+    throw new Error("PINs do not match.");
   }
 
   /* -------------------------------------------------------
      VALIDATE NAME
   ------------------------------------------------------- */
 
-  const name =
-    userData.name.trim();
+  const name = userData.name.trim();
 
   if (!name) {
-    throw new Error(
-      "Please enter your name.",
-    );
+    throw new Error("Please enter your name.");
   }
 
   if (name.length < 2) {
-    throw new Error(
-      "Name must be at least 2 characters.",
-    );
+    throw new Error("Name must be at least 2 characters.");
   }
 
   /* -------------------------------------------------------
      EMAIL / PHONE
   ------------------------------------------------------- */
 
-  const email =
-    userData.email
-      ?.trim()
-      .toLowerCase();
+  const email = userData.email?.trim().toLowerCase();
 
-  const phone =
-    userData.phone?.trim();
+  const phone = userData.phone?.trim();
 
   if (!email && !phone) {
-    throw new Error(
-      "Please enter an email address or phone number.",
-    );
+    throw new Error("Please enter an email address or phone number.");
   }
 
   /* -------------------------------------------------------
@@ -613,13 +504,10 @@ const register = async (
   ------------------------------------------------------- */
 
   if (email) {
-    const emailRegex =
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(email)) {
-      throw new Error(
-        "Please enter a valid email address.",
-      );
+      throw new Error("Please enter a valid email address.");
     }
   }
 
@@ -627,20 +515,10 @@ const register = async (
      PHONE
   ------------------------------------------------------- */
 
-  const normalizedPhone =
-    phone
-      ? normalizeNigerianPhone(phone)
-      : undefined;
+  const normalizedPhone = phone ? normalizeNigerianPhone(phone) : undefined;
 
-  if (
-    normalizedPhone &&
-    !isValidNigerianPhone(
-      normalizedPhone,
-    )
-  ) {
-    throw new Error(
-      "Please enter a valid Nigerian phone number.",
-    );
+  if (normalizedPhone && !isValidNigerianPhone(normalizedPhone)) {
+    throw new Error("Please enter a valid Nigerian phone number.");
   }
 
   /* -------------------------------------------------------
@@ -650,9 +528,7 @@ const register = async (
   const registerData: RegisterData = {
     name,
 
-    ...(email
-      ? { email }
-      : {}),
+    ...(email ? { email } : {}),
 
     ...(normalizedPhone
       ? {
@@ -660,16 +536,13 @@ const register = async (
         }
       : {}),
 
-    password:
-      userData.password,
+    password: userData.password,
 
-    confirmPassword:
-      userData.confirmPassword,
+    confirmPassword: userData.confirmPassword,
 
     ...(userData.referralCode
       ? {
-          referralCode:
-            userData.referralCode,
+          referralCode: userData.referralCode,
         }
       : {}),
   };
@@ -678,67 +551,47 @@ const register = async (
      API REQUEST
   ------------------------------------------------------- */
 
-  const response =
-    await API.post<AuthResponse>(
-      `${USERS_BASE_URL}/register`,
-      registerData,
-    );
+  const response = await API.post<AuthResponse>(
+    `${USERS_BASE_URL}/register`,
+    registerData,
+  );
 
-  const data =
-    response.data;
+  const data = response.data;
 
   if (!data?.success) {
-    throw new Error(
-      data?.message ||
-        "Registration failed.",
-    );
+    throw new Error(data?.message || "Registration failed.");
   }
 
   if (!data.data?._id) {
-    throw new Error(
-      "Authenticated user ID was not returned.",
-    );
+    throw new Error("Authenticated user ID was not returned.");
   }
 
   if (!data.token) {
-    throw new Error(
-      "Authentication token was not returned.",
-    );
+    throw new Error("Authentication token was not returned.");
   }
 
-  return saveAuth(
-    data.data,
-    data.token,
-  );
+  return saveAuth(data.data, data.token);
 };
 
 /* =========================================================
    LOGIN
 ========================================================= */
 
-const login = async (
-  userData: LoginData,
-): Promise<AuthUser> => {
+const login = async (userData: LoginData): Promise<AuthUser> => {
   /* -------------------------------------------------------
      VALIDATE PIN
   ------------------------------------------------------- */
 
-  validatePin(
-    userData.password,
-    "PIN",
-  );
+  validatePin(userData.password, "PIN");
 
   /* -------------------------------------------------------
      IDENTIFIER
   ------------------------------------------------------- */
 
-  const identifier =
-    userData.identifier.trim();
+  const identifier = userData.identifier.trim();
 
   if (!identifier) {
-    throw new Error(
-      "Email or phone number is required.",
-    );
+    throw new Error("Email or phone number is required.");
   }
 
   /*
@@ -749,13 +602,9 @@ const login = async (
    * normalize it to +234XXXXXXXXXX.
    */
 
-  const normalizedIdentifier =
-    identifier.includes("@")
-      ? identifier
-          .toLowerCase()
-      : normalizeNigerianPhone(
-          identifier,
-        );
+  const normalizedIdentifier = identifier.includes("@")
+    ? identifier.toLowerCase()
+    : normalizeNigerianPhone(identifier);
 
   /* -------------------------------------------------------
      VALIDATE PHONE
@@ -763,62 +612,41 @@ const login = async (
 
   if (
     !identifier.includes("@") &&
-    !isValidNigerianPhone(
-      normalizedIdentifier,
-    )
+    !isValidNigerianPhone(normalizedIdentifier)
   ) {
-    throw new Error(
-      "Please enter a valid Nigerian phone number or email.",
-    );
+    throw new Error("Please enter a valid Nigerian phone number or email.");
   }
 
   /* -------------------------------------------------------
      API REQUEST
   ------------------------------------------------------- */
 
-  const response =
-    await API.post<AuthResponse>(
-      `${USERS_BASE_URL}/login`,
-      {
-        identifier:
-          normalizedIdentifier,
+  const response = await API.post<AuthResponse>(`${USERS_BASE_URL}/login`, {
+    identifier: normalizedIdentifier,
 
-        /*
-         * Send the 4-digit PIN
-         * using the backend's existing
-         * "password" field.
-         */
-        password:
-          userData.password,
-      },
-    );
+    /*
+     * Send the 4-digit PIN
+     * using the backend's existing
+     * "password" field.
+     */
+    password: userData.password,
+  });
 
-  const data =
-    response.data;
+  const data = response.data;
 
   if (!data?.success) {
-    throw new Error(
-      data?.message ||
-        "Login failed.",
-    );
+    throw new Error(data?.message || "Login failed.");
   }
 
   if (!data.data?._id) {
-    throw new Error(
-      "Authenticated user ID was not returned.",
-    );
+    throw new Error("Authenticated user ID was not returned.");
   }
 
   if (!data.token) {
-    throw new Error(
-      "Authentication token was not returned.",
-    );
+    throw new Error("Authentication token was not returned.");
   }
 
-  return saveAuth(
-    data.data,
-    data.token,
-  );
+  return saveAuth(data.data, data.token);
 };
 
 /* =========================================================
@@ -827,9 +655,7 @@ const login = async (
 
 const logout = async (): Promise<void> => {
   try {
-    await API.post(
-      `${USERS_BASE_URL}/logout`,
-    );
+    await API.post(`${USERS_BASE_URL}/logout`);
   } finally {
     /*
      * Always clear local authentication,
@@ -844,46 +670,27 @@ const logout = async (): Promise<void> => {
    FORGOT PASSWORD / PIN
 ========================================================= */
 
-const forgotPassword = async (
-  identifier: string,
-): Promise<
-  GenericResponse
-> => {
-  const value =
-    identifier.trim();
+const forgotPassword = async (identifier: string): Promise<GenericResponse> => {
+  const value = identifier.trim();
 
   if (!value) {
-    throw new Error(
-      "Email or phone number is required.",
-    );
+    throw new Error("Email or phone number is required.");
   }
 
-  const normalizedIdentifier =
-    value.includes("@")
-      ? value.toLowerCase()
-      : normalizeNigerianPhone(
-          value,
-        );
+  const normalizedIdentifier = value.includes("@")
+    ? value.toLowerCase()
+    : normalizeNigerianPhone(value);
 
-  if (
-    !value.includes("@") &&
-    !isValidNigerianPhone(
-      normalizedIdentifier,
-    )
-  ) {
-    throw new Error(
-      "Please enter a valid Nigerian phone number or email.",
-    );
+  if (!value.includes("@") && !isValidNigerianPhone(normalizedIdentifier)) {
+    throw new Error("Please enter a valid Nigerian phone number or email.");
   }
 
-  const response =
-    await API.post<GenericResponse>(
-      `${USERS_BASE_URL}/forgot-password`,
-      {
-        identifier:
-          normalizedIdentifier,
-      },
-    );
+  const response = await API.post<GenericResponse>(
+    `${USERS_BASE_URL}/forgot-password`,
+    {
+      identifier: normalizedIdentifier,
+    },
+  );
 
   return response.data;
 };
@@ -895,33 +702,23 @@ const forgotPassword = async (
 const resetPassword = async (
   token: string,
   password: string,
-): Promise<
-  GenericResponse
-> => {
+): Promise<GenericResponse> => {
   if (!token) {
-    throw new Error(
-      "Password reset token is required.",
-    );
+    throw new Error("Password reset token is required.");
   }
 
   /*
    * Reset credential must be
    * exactly 4 numeric digits.
    */
-  validatePin(
-    password,
-    "PIN",
-  );
+  validatePin(password, "PIN");
 
-  const response =
-    await API.put<GenericResponse>(
-      `${USERS_BASE_URL}/reset-password/${encodeURIComponent(
-        token,
-      )}`,
-      {
-        password,
-      },
-    );
+  const response = await API.put<GenericResponse>(
+    `${USERS_BASE_URL}/reset-password/${encodeURIComponent(token)}`,
+    {
+      password,
+    },
+  );
 
   return response.data;
 };
@@ -933,47 +730,32 @@ const resetPassword = async (
 const verifyPhone = async (
   userId: string,
   code: string,
-): Promise<
-  AuthUser | GenericResponse
-> => {
+): Promise<AuthUser | GenericResponse> => {
   if (!userId) {
-    throw new Error(
-      "User ID is required.",
-    );
+    throw new Error("User ID is required.");
   }
 
   if (!code) {
-    throw new Error(
-      "Verification code is required.",
-    );
+    throw new Error("Verification code is required.");
   }
 
-  const response =
-    await API.post<AuthResponse>(
-      `${USERS_BASE_URL}/verify-phone`,
-      {
-        userId,
-        code,
-      },
-    );
+  const response = await API.post<AuthResponse>(
+    `${USERS_BASE_URL}/verify-phone`,
+    {
+      userId,
+      code,
+    },
+  );
 
-  const data =
-    response.data;
+  const data = response.data;
 
   /*
    * Some backends return a fresh
    * authenticated user/token.
    */
 
-  if (
-    data?.success &&
-    data.data?._id &&
-    data.token
-  ) {
-    return saveAuth(
-      data.data,
-      data.token,
-    );
+  if (data?.success && data.data?._id && data.token) {
+    return saveAuth(data.data, data.token);
   }
 
   return data;
@@ -983,60 +765,36 @@ const verifyPhone = async (
    GET CURRENT USER
 ========================================================= */
 
-const getMe = async (): Promise<
-  AuthUser | null
-> => {
-  const token =
-    getToken();
-
-  /*
-   * Do not call /me without a JWT.
-   */
+const getMe = async (): Promise<AuthUser | null> => {
+  const token = getToken();
 
   if (!token) {
     return null;
   }
 
   try {
-    const response =
-      await API.get<
-        GenericResponse<BackendUser>
-      >(
-        `${USERS_BASE_URL}/me`,
-      );
-
-    const responseData =
-      response.data;
-
-    if (
-      responseData?.success === false
-    ) {
-      return null;
-    }
-
-    const userData =
-      responseData?.data;
-
-    if (!userData?._id) {
-      return null;
-    }
-
-    /*
-     * Keep the existing JWT.
-     */
-    return saveAuth(
-      userData,
-      token,
+    const response = await API.get<GenericResponse<BackendUser>>(
+      `${USERS_BASE_URL}/me`,
     );
-  } catch {
-    /*
-     * Api.ts handles HTTP 401 globally.
-     *
-     * Do not clear valid local authentication
-     * here for ordinary network/server errors.
-     */
 
-    return null;
+    const responseData = response.data;
+    const userData = responseData?.data;
+
+    if (responseData?.success === false || !userData?._id) {
+      return null;
+    }
+
+    return saveAuth(userData, token);
+  } catch (error) {
+    // An expired or invalid token is not recoverable.
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      clearAuth();
+      return null;
+    }
+
+    // Preserve the session if the failure is a network
+    // problem or server error. Do not mistake it for expiry.
+    throw error;
   }
 };
 
@@ -1044,13 +802,8 @@ const getMe = async (): Promise<
    GET CONTACTS
 ========================================================= */
 
-const getContacts = async (): Promise<
-  GenericResponse
-> => {
-  const response =
-    await API.get<GenericResponse>(
-      `${USERS_BASE_URL}/contacts`,
-    );
+const getContacts = async (): Promise<GenericResponse> => {
+  const response = await API.get<GenericResponse>(`${USERS_BASE_URL}/contacts`);
 
   return response.data;
 };
@@ -1059,24 +812,17 @@ const getContacts = async (): Promise<
    ADD CONTACT
 ========================================================= */
 
-const addContact = async (
-  userId: string,
-): Promise<
-  GenericResponse
-> => {
+const addContact = async (userId: string): Promise<GenericResponse> => {
   if (!userId) {
-    throw new Error(
-      "User ID is required.",
-    );
+    throw new Error("User ID is required.");
   }
 
-  const response =
-    await API.post<GenericResponse>(
-      `${USERS_BASE_URL}/contacts/add`,
-      {
-        userId,
-      },
-    );
+  const response = await API.post<GenericResponse>(
+    `${USERS_BASE_URL}/contacts/add`,
+    {
+      userId,
+    },
+  );
 
   return response.data;
 };
@@ -1086,9 +832,7 @@ const addContact = async (
 ========================================================= */
 
 const getToken = (): string | null => {
-  return localStorage.getItem(
-    TOKEN_KEY,
-  );
+  return localStorage.getItem(TOKEN_KEY);
 };
 
 /* =========================================================
@@ -1097,29 +841,19 @@ const getToken = (): string | null => {
 
 const getUser = (): AuthUser | null => {
   try {
-    const storedUser =
-      localStorage.getItem(
-        USER_KEY,
-      );
+    const storedUser = localStorage.getItem(USER_KEY);
 
     if (!storedUser) {
       return null;
     }
 
-    const user =
-      JSON.parse(
-        storedUser,
-      ) as AuthUser;
+    const user = JSON.parse(storedUser) as AuthUser;
 
     /*
      * Basic integrity validation.
      */
 
-    if (
-      !user?._id ||
-      !user.role ||
-      !user.token
-    ) {
+    if (!user?._id || !user.role || !user.token) {
       clearAuth();
 
       return null;
@@ -1137,123 +871,90 @@ const getUser = (): AuthUser | null => {
    IS AUTHENTICATED
 ========================================================= */
 
-const isAuthenticated =
-  (): boolean => {
-    return Boolean(
-      getToken(),
-    );
-  };
+const isAuthenticated = (): boolean => {
+  return Boolean(getToken());
+};
 
 /* =========================================================
    GET ROLE
 ========================================================= */
 
-const getRole =
-  (): UserRole | null => {
-    const user =
-      getUser();
+const getRole = (): UserRole | null => {
+  const user = getUser();
 
-    return user?.role ?? null;
-  };
+  return user?.role ?? null;
+};
 
 /* =========================================================
    HAS ROLE
 ========================================================= */
 
-const hasRole = (
-  roles:
-    | UserRole
-    | readonly UserRole[],
-): boolean => {
-  const user =
-    getUser();
+const hasRole = (roles: UserRole | readonly UserRole[]): boolean => {
+  const user = getUser();
 
   if (!user) {
     return false;
   }
 
-  const allowedRoles =
-    Array.isArray(roles)
-      ? roles
-      : [roles];
+  const allowedRoles = Array.isArray(roles) ? roles : [roles];
 
-  return allowedRoles.includes(
-    user.role,
-  );
+  return allowedRoles.includes(user.role);
 };
 
 /* =========================================================
    IS ADMIN
 ========================================================= */
 
-const isAdmin =
-  (): boolean => {
-    const role =
-      getRole();
+const isAdmin = (): boolean => {
+  const role = getRole();
 
-    if (!role) {
-      return false;
-    }
+  if (!role) {
+    return false;
+  }
 
-    return roleIsAdmin(role);
-  };
+  return roleIsAdmin(role);
+};
 
 /* =========================================================
    IS SUPER ADMIN
 ========================================================= */
 
-const isSuperAdmin =
-  (): boolean => {
-    return hasRole(
-      "super_admin",
-    );
-  };
+const isSuperAdmin = (): boolean => {
+  return hasRole("super_admin");
+};
 
 /* =========================================================
    IS LOAN OFFICER
 ========================================================= */
 
-const isLoanOfficer =
-  (): boolean => {
-    return hasRole(
-      "loan_officer",
-    );
-  };
+const isLoanOfficer = (): boolean => {
+  return hasRole("loan_officer");
+};
 
 /* =========================================================
    IS RISK OFFICER
 ========================================================= */
 
-const isRiskOfficer =
-  (): boolean => {
-    return hasRole(
-      "risk_officer",
-    );
-  };
+const isRiskOfficer = (): boolean => {
+  return hasRole("risk_officer");
+};
 
 /* =========================================================
    IS FINANCE
 ========================================================= */
 
-const isFinance =
-  (): boolean => {
-    return hasRole(
-      "finance",
-    );
-  };
+const isFinance = (): boolean => {
+  return hasRole("finance");
+};
 
 /* =========================================================
    IS SUPPORT
 ========================================================= */
 
-const isSupport =
-  (): boolean => {
-    return hasRole(
-      "support",
-    );
-  };
+const isSupport = (): boolean => {
+  return hasRole("support");
+};
 
-  
 const restoreBiometricSession = async (
   token: string,
 ): Promise<AuthUser | null> => {
@@ -1261,26 +962,21 @@ const restoreBiometricSession = async (
     throw new Error("Saved authentication token is missing.");
   }
 
-  // Restore the token for the existing API interceptor.
+  // Restore the saved token for the Axios interceptor.
   localStorage.setItem(TOKEN_KEY, token);
 
-  try {
-    const currentUser = await getMe();
+  const currentUser = await getMe();
 
-    if (!currentUser) {
-      clearAuth();
-      throw new Error(
-        "Your saved session has expired. Please log in with your PIN.",
-      );
-    }
-
-    return currentUser;
-  } catch (error) {
+  if (!currentUser) {
     clearAuth();
-    throw error;
-  }
-};
 
+    throw new Error(
+      "Your saved session has expired. Please log in with your PIN.",
+    );
+  }
+
+  return currentUser;
+};
 
 /* =========================================================
    EXPORT AUTH API
@@ -1316,10 +1012,7 @@ const authApi = {
   isSupport,
   restoreBiometricSession,
   saveAuth,
-  clearAuth,    
+  clearAuth,
 };
 
-
-
 export default authApi;
-

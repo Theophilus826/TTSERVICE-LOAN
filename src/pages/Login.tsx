@@ -455,72 +455,73 @@ export default function Login() {
           </button>
 
           {/* ALLOW / DISALLOW FINGERPRINT */}
+          {!isBiometricEnabled && (
+            <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
 
-          <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+              <div className="flex items-center gap-3">
+                <Fingerprint
+                  size={28}
+                  className="shrink-0 text-orange-500"
+                />
 
-            <div className="flex items-center gap-3">
-              <Fingerprint
-                size={28}
-                className="shrink-0 text-orange-500"
-              />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">
+                    Fingerprint Login
+                  </p>
 
-              <div>
-                <p className="text-sm font-semibold text-gray-800">
-                  Fingerprint Login
-                </p>
-
-                <p className="text-xs text-gray-500">
-                  Would you like to enable fingerprint authentication?
-                </p>
+                  <p className="text-xs text-gray-500">
+                    Would you like to enable fingerprint authentication?
+                  </p>
+                </div>
               </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+
+                {/* ALLOW */}
+
+                <button
+                  type="button"
+                  disabled={busy || !isBiometricAvailable}
+                  onClick={() => handleBiometricPreference(true)}
+                  aria-pressed={allowBiometrics === true}
+                  className={`rounded-lg border py-3 text-sm font-semibold transition ${
+                    allowBiometrics === true
+                      ? "border-green-600 bg-green-600 text-white"
+                      : "border-green-200 bg-white text-green-700 hover:border-green-500 hover:bg-green-50"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  ✓ Allow
+                </button>
+
+                {/* DISALLOW */}
+
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => handleBiometricPreference(false)}
+                  aria-pressed={allowBiometrics === false}
+                  className={`rounded-lg border py-3 text-sm font-semibold transition ${
+                    allowBiometrics === false
+                      ? "border-red-600 bg-red-600 text-white"
+                      : "border-red-200 bg-white text-red-600 hover:border-red-500 hover:bg-red-50"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  ✕ Disallow
+                </button>
+
+              </div>
+
+              <p className="mt-3 text-center text-xs text-gray-500">
+                {allowBiometrics === true
+                  ? "Fingerprint enrollment will be offered after PIN login."
+                  : allowBiometrics === false
+                    ? "You selected PIN login only."
+                    : !isBiometricAvailable
+                      ? "Biometric authentication is unavailable on this device."
+                      : "Select Allow or Disallow before continuing."}
+              </p>
             </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-
-              {/* ALLOW */}
-
-              <button
-                type="button"
-                disabled={busy || !isBiometricAvailable}
-                onClick={() => handleBiometricPreference(true)}
-                aria-pressed={allowBiometrics === true}
-                className={`rounded-lg border py-3 text-sm font-semibold transition ${
-                  allowBiometrics === true
-                    ? "border-green-600 bg-green-600 text-white"
-                    : "border-green-200 bg-white text-green-700 hover:border-green-500 hover:bg-green-50"
-                } disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                ✓ Allow
-              </button>
-
-              {/* DISALLOW */}
-
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => handleBiometricPreference(false)}
-                aria-pressed={allowBiometrics === false}
-                className={`rounded-lg border py-3 text-sm font-semibold transition ${
-                  allowBiometrics === false
-                    ? "border-red-600 bg-red-600 text-white"
-                    : "border-red-200 bg-white text-red-600 hover:border-red-500 hover:bg-red-50"
-                } disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                ✕ Disallow
-              </button>
-
-            </div>
-
-            <p className="mt-3 text-center text-xs text-gray-500">
-              {allowBiometrics === true
-                ? "Fingerprint enrollment will be offered after PIN login."
-                : allowBiometrics === false
-                  ? "You selected PIN login only."
-                  : !isBiometricAvailable
-                    ? "Biometric authentication is unavailable on this device."
-                    : "Select Allow or Disallow before continuing."}
-            </p>
-          </div>
+          )}
         </form>
 
         {/* DIVIDER */}

@@ -250,9 +250,32 @@ const enableBiometricLogin = async (): Promise<void> => {
 
     await SecureStorage.set(TOKEN_KEY, token);
 
+    // Verify that the token was actually persisted.
+    const savedToken = await SecureStorage.get(TOKEN_KEY);
+
+    console.log(`${LOG} Token save verification:`, {
+      tokenExists: typeof savedToken === "string" && savedToken.length > 0,
+      tokenMatches: savedToken === token,
+      tokenType: typeof savedToken,
+    });
+
+    if (savedToken !== token) {
+      throw new Error(
+        "Biometric token could not be saved correctly.",
+      );
+    }
+
     console.log(`${LOG} Saving biometric enabled flag...`);
 
     await SecureStorage.set(ENABLED_KEY, true);
+
+    const savedEnabled = await SecureStorage.get(ENABLED_KEY);
+
+    if (savedEnabled !== true) {
+      throw new Error(
+        "Biometric enabled status could not be saved.",
+      );
+    }
 
     logSuccess(operation, start);
   } catch (error) {

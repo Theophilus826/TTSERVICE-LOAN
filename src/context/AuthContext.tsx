@@ -285,40 +285,75 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
      NORMAL PIN LOGIN
   ======================================================= */
 
-  const login = useCallback(
-    async (data: LoginData): Promise<AuthUser> => {
-      setLoading(true);
+ const login = useCallback(
+  async (data: LoginData): Promise<AuthUser> => {
+    console.group("[AuthContext] PIN LOGIN");
 
-      try {
-        if (!isValidPin(data.password)) {
-          throw new Error("PIN must be exactly 4 digits.");
-        }
+    setLoading(true);
 
-        const identifier = data.identifier.trim();
+    try {
+      console.log("[AuthContext] Starting PIN validation...");
 
-        const normalizedIdentifier = isValidNigerianPhone(identifier)
-          ? normalizeNigerianPhone(identifier)
-          : identifier;
-
-        const loginData: LoginData = {
-          ...data,
-          identifier: normalizedIdentifier,
-        };
-
-        const authenticatedUser = await authApi.login(loginData);
-
-        setUser(authenticatedUser);
-
-        // Refresh biometric status after login.
-        await checkBiometricAvailability();
-
-        return authenticatedUser;
-      } finally {
-        setLoading(false);
+      if (!isValidPin(data.password)) {
+        throw new Error("PIN must be exactly 4 digits.");
       }
-    },
-    [checkBiometricAvailability],
-  );
+
+      const identifier = data.identifier.trim();
+
+      const normalizedIdentifier = isValidNigerianPhone(identifier)
+        ? normalizeNigerianPhone(identifier)
+        : identifier;
+
+      const loginData: LoginData = {
+        ...data,
+        identifier: normalizedIdentifier,
+      };
+
+      console.log("[AuthContext] Sending login request:", {
+        identifier: normalizedIdentifier,
+        pinProvided: !!data.password,
+      });
+
+      const authenticatedUser = await authApi.login(loginData);
+
+      console.log("[AuthContext] PIN LOGIN SUCCESS:", {
+        userExists: !!authenticatedUser,
+        userId: authenticatedUser?._id,
+        role: authenticatedUser?.role,
+        tokenExists: !!authApi.getToken(),
+        storedUserExists: !!authApi.getUser(),
+      });
+
+      if (!authApi.getToken()) {
+        throw new Error(
+          "Login succeeded but the authentication token was not saved.",
+        );
+      }
+
+      setUser(authenticatedUser);
+
+      console.log("[AuthContext] React user state updated.");
+
+      // Check biometric availability after successful PIN login.
+      const biometricStatus = await checkBiometricAvailability();
+
+      console.log("[AuthContext] Post-login biometric status:", {
+        available: biometricStatus.available,
+        enabled: biometricStatus.enabled,
+        error: biometricStatus.error,
+      });
+
+      return authenticatedUser;
+    } catch (error) {
+      console.error("[AuthContext] PIN LOGIN FAILED:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+      console.groupEnd();
+    }
+  },
+  [checkBiometricAvailability],
+);
 
   /* =======================================================
      REGISTER
@@ -377,9 +412,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.log("[AuthContext] Checking authenticated user...");
 
       const token = authApi.getToken();
+      const authenticatedUser = authApi.getUser();
 
-      if (!user || !token) {
-        throw new Error("Please log in with your PIN first.");
+      console.log("[AuthContext] Enrollment authentication check:", {
+        contextUserExists: !!user,
+        storedUserExists: !!authenticatedUser,
+        tokenExists: !!token,
+        userId: authenticatedUser?._id,
+      });
+
+      if (!token) {
+        throw new Error(
+          "Authentication token is missing. Complete PIN login before enabling biometrics.",
+        );
+      }
+
+      if (!user && !authenticatedUser) {
+        throw new Error(
+          "Authenticated user not found. Please complete PIN login first.",
+        );
       }
 
       console.log("[AuthContext] User authenticated:", !!user);

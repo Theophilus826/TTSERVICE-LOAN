@@ -227,118 +227,35 @@ const enableBiometricLogin = async (): Promise<void> => {
   const start = logStart(operation);
 
   try {
-    console.group(`${LOG} FINGERPRINT ENROLLMENT`);
-
-    // STEP 1: Confirm native Android environment
-    console.log("[STEP 1] Checking native platform...");
-
     ensureNative();
 
-    // STEP 2: Retrieve authenticated user's token
-    console.log("[STEP 2] Retrieving authentication token...");
-
     const token = authApi.getToken();
-
-    console.log("[STEP 2] Authentication token exists:", !!token);
-
     if (!token) {
       throw new Error(
         "Please log in with your PIN before enabling fingerprint login.",
       );
     }
 
-    // STEP 3: Check biometric availability
-    console.log("[STEP 3] Checking fingerprint availability...");
-
-    const status = await getBiometricStatus();
-
-    console.log("[STEP 3] Biometric device information:", {
-      isAvailable: status.isAvailable,
-      biometryType: status.biometryType,
-      biometryTypes: status.biometryTypes,
-      strongBiometryIsAvailable: status.strongBiometryIsAvailable,
-      deviceIsSecure: status.deviceIsSecure,
-      reason: status.reason,
-      code: status.code,
-    });
-
-    if (!status.isAvailable) {
-      throw new Error(
-        status.reason ||
-          "No enrolled fingerprint or supported biometric is available.",
-      );
-    }
-
-    // STEP 4: Display Android fingerprint prompt
-    console.log("[STEP 4] DISPLAYING ANDROID FINGERPRINT PROMPT...");
-
-    console.log("[STEP 4] Touch your fingerprint sensor to continue.");
-
     await authenticateFingerprint();
-
-    console.log("[STEP 4] SUCCESS: Android verified the fingerprint.");
-
-    // STEP 5: Save token
-    console.log("[STEP 5] Saving authentication credential...");
 
     await SecureStorage.set(TOKEN_KEY, token);
 
     const savedToken = await SecureStorage.get(TOKEN_KEY);
-
-    console.log("[STEP 5] Token storage verification:", {
-      tokenExists: typeof savedToken === "string" && savedToken.length > 0,
-      tokenMatches: savedToken === token,
-    });
-
     if (savedToken !== token) {
-      throw new Error("Authentication credential could not be saved.");
+      throw new Error("Biometric token could not be saved correctly.");
     }
-
-    // STEP 6: Save enabled flag
-    console.log("[STEP 6] Saving biometric enabled flag...");
 
     await SecureStorage.set(ENABLED_KEY, true);
 
     const savedEnabled = await SecureStorage.get(ENABLED_KEY);
-
-    console.log("[STEP 6] Enabled flag verification:", savedEnabled);
-
     if (savedEnabled !== true) {
       throw new Error("Biometric enabled status could not be saved.");
     }
 
-    // STEP 7: Final verification
-    console.log("[STEP 7] Checking final enrollment status...");
-
-    const finalStatus = await isBiometricEnabled();
-
-    console.log("[STEP 7] Final enrollment result:", finalStatus);
-
-    if (!finalStatus) {
-      throw new Error("Fingerprint enrollment could not be confirmed.");
-    }
-
-    console.log("[SUCCESS] FINGERPRINT LOGIN ENABLED SUCCESSFULLY.");
-
     logSuccess(operation, start);
   } catch (error) {
-    console.error(`${LOG} FINGERPRINT ENROLLMENT ERROR:`, error);
-
     logError(operation, start, error);
-
-    // Prevent partially saved credentials from being treated as enabled.
-    try {
-      await SecureStorage.remove(ENABLED_KEY);
-      await SecureStorage.remove(TOKEN_KEY);
-
-      console.warn(`${LOG} Partial biometric credentials cleaned up.`);
-    } catch (cleanupError) {
-      console.error(`${LOG} Secure storage cleanup failed:`, cleanupError);
-    }
-
     throw error;
-  } finally {
-    console.groupEnd();
   }
 };
 

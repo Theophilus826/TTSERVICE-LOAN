@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Eye, EyeOff, Fingerprint } from "lucide-react";
@@ -54,15 +53,12 @@ export default function Login() {
       user.role === "admin" || user.role === "super_admin";
 
     const requestedPath =
-      typeof from === "string" &&
-      from.startsWith("/") &&
-      !from.startsWith("//")
+      typeof from === "string" && from.startsWith("/") && !from.startsWith("//")
         ? from
         : null;
 
     const destination =
-      requestedPath &&
-      (!requestedPath.startsWith("/admin") || isAdministrator)
+      requestedPath && (!requestedPath.startsWith("/admin") || isAdministrator)
         ? requestedPath
         : isAdministrator
           ? "/admin"
@@ -189,25 +185,15 @@ export default function Login() {
 
       setBiometricStatusMessage(biometricStatus.error ?? "");
 
-      // Only offer enrollment when the user explicitly selected Allow.
-      if (
-        biometricStatus.available &&
-        !biometricStatus.enabled &&
-        allowBiometrics === true
-      ) {
-        console.log("[Login] User allowed biometric enrollment.");
-
-        setShowBiometricSetup(true);
-
-        toast.info("You can now enable fingerprint login.");
-      } else if (
-        biometricStatus.available &&
-        !biometricStatus.enabled &&
-        allowBiometrics === false
-      ) {
-        console.log("[Login] User declined biometric enrollment.");
-
-        setShowBiometricSetup(false);
+      if (allowBiometrics === true) {
+        if (!biometricStatus.available) {
+          toast.warning(
+            biometricStatus.error ||
+              "Please enroll a fingerprint or supported biometric in your phone settings.",
+          );
+        } else if (!biometricStatus.enabled) {
+          setShowBiometricSetup(true);
+        }
       }
     } catch (error: unknown) {
       console.error("[Login] PIN login failed:", error);
@@ -277,39 +263,53 @@ export default function Login() {
   const handleEnableBiometrics = async (): Promise<void> => {
     if (busy) return;
 
-    console.group("BIOMETRIC ENROLLMENT");
-
     try {
       const token = authApi.getToken();
       const currentUser = authApi.getUser();
 
-      if (!isAuthenticated || !token || !currentUser) {
+      if (!token || !currentUser || !isAuthenticated) {
         throw new Error("Please sign in with your PIN first.");
       }
 
-      console.log("[Login] Starting biometric enrollment...");
+      console.log("[Login] Starting fingerprint enrollment...");
 
-      await enableBiometricLogin();
+      // Recheck device support.
+      const availability = await checkBiometricAvailability();
 
-      const status = await checkBiometricAvailability();
+      setBiometricStatusMessage(availability.error ?? "");
 
-      setBiometricStatusMessage(status.error ?? "");
-
-      if (!status.enabled) {
-        throw new Error("Fingerprint enrollment was not saved.");
+      if (!availability.available) {
+        throw new Error(availability.error || "Fingerprint is unavailable.");
       }
 
-      console.log("[Login] Fingerprint successfully registered.");
+      if (availability.enabled) {
+        setShowBiometricSetup(false);
+        toast.success("Fingerprint login is already enabled.");
+        return;
+      }
+
+      // Start actual biometric registration.
+      await enableBiometricLogin();
+
+      // Verify registration.
+      const updatedStatus = await checkBiometricAvailability();
+
+      setBiometricStatusMessage(updatedStatus.error ?? "");
+
+      if (!updatedStatus.enabled) {
+        throw new Error(
+          "Fingerprint registration could not be confirmed. Please try again.",
+        );
+      }
 
       setAllowBiometrics(true);
       setShowBiometricSetup(false);
 
       toast.success("Fingerprint login enabled successfully!");
     } catch (error: unknown) {
-      console.error("[Login] Biometric enrollment failed:", error);
+      console.error("[Login] Fingerprint enrollment failed:", error);
+
       toast.error(getErrorMessage(error));
-    } finally {
-      console.groupEnd();
     }
   };
 
@@ -321,13 +321,10 @@ export default function Login() {
     setAllowBiometrics(allow);
 
     if (allow) {
-      toast.info(
-        "Fingerprint enrollment will be offered after PIN login.",
-      );
+      toast.success("Biometric login selected. Continue with your PIN.");
     } else {
       setShowBiometricSetup(false);
-
-      toast.info("You have selected PIN login only.");
+      toast.info("PIN login only selected.");
     }
   };
 
@@ -341,13 +338,9 @@ export default function Login() {
         <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl">
           <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-orange-500" />
 
-          <h2 className="text-xl font-semibold text-gray-800">
-            Loading
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-800">Loading</h2>
 
-          <p className="mt-2 text-sm text-gray-500">
-            Please wait...
-          </p>
+          <p className="mt-2 text-sm text-gray-500">Please wait...</p>
         </div>
       </div>
     );
@@ -360,21 +353,17 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-8">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-
         {/* BRAND */}
 
         <h1 className="mb-2 text-center text-3xl font-bold text-orange-500">
           Lovest
         </h1>
 
-        <p className="mb-8 text-center text-gray-500">
-          Welcome back
-        </p>
+        <p className="mb-8 text-center text-gray-500">Welcome back</p>
 
         {/* LOGIN FORM */}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-
           {/* EMAIL OR PHONE */}
 
           <div>
@@ -457,12 +446,8 @@ export default function Login() {
           {/* ALLOW / DISALLOW FINGERPRINT */}
           {!isBiometricEnabled && (
             <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
-
               <div className="flex items-center gap-3">
-                <Fingerprint
-                  size={28}
-                  className="shrink-0 text-orange-500"
-                />
+                <Fingerprint size={28} className="shrink-0 text-orange-500" />
 
                 <div>
                   <p className="text-sm font-semibold text-gray-800">
@@ -476,12 +461,11 @@ export default function Login() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-
                 {/* ALLOW */}
 
                 <button
                   type="button"
-                  disabled={busy || !isBiometricAvailable}
+                  disabled={busy}
                   onClick={() => handleBiometricPreference(true)}
                   aria-pressed={allowBiometrics === true}
                   className={`rounded-lg border py-3 text-sm font-semibold transition ${
@@ -508,7 +492,6 @@ export default function Login() {
                 >
                   ✕ Disallow
                 </button>
-
               </div>
 
               <p className="mt-3 text-center text-xs text-gray-500">
@@ -602,18 +585,15 @@ export default function Login() {
 
       {showBiometricSetup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
-
           <section
             role="dialog"
             aria-modal="true"
             aria-labelledby="biometric-setup-title"
             className="w-full max-w-sm rounded-3xl bg-white p-7 text-center shadow-2xl"
           >
-
             {/* FINGERPRINT ICON */}
 
             <div className="relative mx-auto flex h-24 w-24 items-center justify-center">
-
               {biometricLoading && (
                 <>
                   <div className="absolute inset-0 animate-ping rounded-full border-2 border-orange-200 opacity-50" />
@@ -710,7 +690,6 @@ export default function Login() {
                 </button>
               </>
             )}
-
           </section>
         </div>
       )}

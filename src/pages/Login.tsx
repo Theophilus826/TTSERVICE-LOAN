@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 
 import { useAuth } from "../context/AuthContext";
+import authApi from "../services/AuthService";
 
 export default function Login() {
   const [identifier, setIdentifier] = useState("");
@@ -162,29 +163,32 @@ export default function Login() {
     try {
       console.log("[Login] Starting PIN login...");
 
-      await login({
+      const authenticatedUser = await login({
         identifier: cleanIdentifier,
         password,
       });
 
-      console.log("[Login] PIN login successful.");
+      const token = authApi.getToken();
+
+      console.log("[Login] Authentication verification:", {
+        userExists: !!authenticatedUser,
+        tokenExists: !!token,
+      });
+
+      if (!token || !authenticatedUser) {
+        throw new Error(
+          "Login succeeded but the authentication session was not saved.",
+        );
+      }
 
       toast.success("Login successful.");
 
-      console.log("[Login] Checking biometric availability...");
-
       const biometricStatus = await checkBiometricAvailability();
-
-      console.log("[Login] Biometric status:", biometricStatus);
 
       setBiometricStatusMessage(biometricStatus.error ?? "");
 
       if (biometricStatus.available && !biometricStatus.enabled) {
-        console.log("[Login] Opening biometric setup modal.");
-
         setShowBiometricSetup(true);
-      } else {
-        console.log("[Login] Biometric setup not required:", biometricStatus);
       }
     } catch (error: unknown) {
       console.error("[Login] PIN login failed:", error);
@@ -275,17 +279,37 @@ export default function Login() {
   ========================================================= */
 
   const handleEnableBiometrics = async (): Promise<void> => {
-    if (busy) {
-      return;
-    }
+    if (busy) return;
 
     try {
+      const token = authApi.getToken();
+      const currentUser = authApi.getUser();
+
+      console.log("[Login] Biometric enrollment session:", {
+        tokenExists: !!token,
+        userExists: !!currentUser,
+      });
+
+      if (!token || !currentUser) {
+        toast.error(
+          "Your login session is missing. Please sign in again with your PIN.",
+        );
+        setShowBiometricSetup(false);
+        return;
+      }
+
       await enableBiometricLogin();
 
-      toast.success("Fingerprint login is now enabled.");
+      const biometricStatus = await checkBiometricAvailability();
 
+      if (!biometricStatus.enabled) {
+        throw new Error("Fingerprint login was not saved. Please try again.");
+      }
+
+      toast.success("Fingerprint login is now enabled.");
       setShowBiometricSetup(false);
     } catch (error: unknown) {
+      console.error("[Login] Biometric enrollment failed:", error);
       toast.error(getErrorMessage(error));
     }
   };

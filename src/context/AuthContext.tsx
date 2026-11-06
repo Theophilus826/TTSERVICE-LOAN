@@ -167,26 +167,47 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     enabled: boolean;
     error?: string;
   }> => {
+    console.group("[AuthContext] CHECK BIOMETRIC AVAILABILITY");
+
     try {
+      console.log("[AuthContext] Calling getBiometricStatus...");
+
       const status = await biometricAuth.getBiometricStatus();
-      const available = status.isAvailable;
+
+      console.log("[AuthContext] Device status:", {
+        available: status.isAvailable,
+        biometryType: status.biometryType,
+        biometryTypes: status.biometryTypes,
+        deviceIsSecure: status.deviceIsSecure,
+        reason: status.reason,
+        code: status.code,
+      });
 
       let enabled = false;
 
-      if (available) {
+      if (status.isAvailable) {
+        console.log("[AuthContext] Checking saved biometric credentials...");
+
         enabled = await biometricAuth.isBiometricEnabled();
       }
 
-      setIsBiometricAvailable(available);
+      setIsBiometricAvailable(status.isAvailable);
       setIsBiometricEnabled(enabled);
 
-      return {
-        available,
+      console.log("[AuthContext] Final biometric state:", {
+        available: status.isAvailable,
         enabled,
-        ...(!available && status.reason ? { error: status.reason } : {}),
+      });
+
+      return {
+        available: status.isAvailable,
+        enabled,
+        ...(!status.isAvailable && status.reason
+          ? { error: status.reason }
+          : {}),
       };
     } catch (error) {
-      console.error("Biometric availability check failed:", error);
+      console.error("[AuthContext] Availability check failed:", error);
 
       setIsBiometricAvailable(false);
       setIsBiometricEnabled(false);
@@ -199,6 +220,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             ? error.message
             : "Unable to check biometric availability.",
       };
+    } finally {
+      console.groupEnd();
     }
   }, []);
 
@@ -443,46 +466,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   ======================================================= */
 
   const loginWithBiometrics = useCallback(async (): Promise<AuthUser> => {
+    console.group("[AuthContext] FINGERPRINT LOGIN");
+
     setLoading(true);
     setBiometricLoading(true);
 
     try {
-      // Check actual device support.
-      const available = await biometricAuth.isBiometricAvailable();
+      console.log("[AuthContext] Starting biometric login...");
 
-      setIsBiometricAvailable(available);
-
-      if (!available) {
-        setIsBiometricEnabled(false);
-
-        throw new Error(
-          "Fingerprint authentication is unavailable on this device.",
-        );
-      }
-
-      // Check whether the user registered biometrics.
-      const enabled = await biometricAuth.isBiometricEnabled();
-
-      setIsBiometricEnabled(enabled);
-
-      if (!enabled) {
-        throw new Error(
-          "Fingerprint login has not been enabled. Please sign in with your PIN first.",
-        );
-      }
-
-      // Perform actual biometric authentication.
       const authenticatedUser = await biometricAuth.loginWithBiometrics();
+
+      console.log(
+        "[AuthContext] Backend authentication successful:",
+        !!authenticatedUser,
+      );
 
       setUser(authenticatedUser);
 
+      setIsBiometricAvailable(true);
+      setIsBiometricEnabled(true);
+
       return authenticatedUser;
     } catch (error) {
-      console.error("Biometric login failed:", error);
+      console.error("[AuthContext] Fingerprint login failed:", error);
+
       throw error;
     } finally {
       setBiometricLoading(false);
       setLoading(false);
+      console.groupEnd();
     }
   }, []);
 

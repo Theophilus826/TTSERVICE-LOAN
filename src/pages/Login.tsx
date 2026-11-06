@@ -398,7 +398,19 @@ export default function Login() {
       setAllowBiometrics(true);
       setShowBiometricSetup(false);
 
-      toast.success("Fingerprint login enabled successfully!");
+      if (allowBiometrics === true) {
+        const biometricStatus = await checkBiometricAvailability();
+
+        if (!biometricStatus.available) {
+          toast.warning(biometricStatus.error || "Fingerprint is unavailable.");
+          return;
+        }
+
+        if (!biometricStatus.enabled) {
+          await enableBiometricLogin();
+          toast.success("Fingerprint login enabled successfully!");
+        }
+      }
     } catch (error: unknown) {
       console.error("[Login] Fingerprint enrollment failed:", error);
 

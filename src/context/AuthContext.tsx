@@ -346,25 +346,60 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   ======================================================= */
 
   const enableBiometricLogin = useCallback(async (): Promise<void> => {
+    console.group("[AuthContext] ENABLE FINGERPRINT LOGIN");
+
     setBiometricLoading(true);
 
     try {
-      if (!user || !authApi.getToken()) {
+      console.log("[AuthContext] Checking authenticated user...");
+
+      const token = authApi.getToken();
+
+      if (!user || !token) {
         throw new Error("Please log in with your PIN first.");
       }
 
-      const available = await biometricAuth.isBiometricAvailable();
+      console.log("[AuthContext] User authenticated:", !!user);
+      console.log("[AuthContext] Authentication token exists:", !!token);
 
-      if (!available) {
+      // STEP 1: Check device biometric availability
+      console.log("[AuthContext] Checking biometric availability...");
+
+      const status = await biometricAuth.getBiometricStatus();
+
+      console.log("[AuthContext] Device biometric status:", {
+        isAvailable: status.isAvailable,
+        biometryType: status.biometryType,
+        biometryTypes: status.biometryTypes,
+        strongBiometryIsAvailable: status.strongBiometryIsAvailable,
+        deviceIsSecure: status.deviceIsSecure,
+        reason: status.reason,
+        code: status.code,
+      });
+
+      setIsBiometricAvailable(status.isAvailable);
+
+      if (!status.isAvailable) {
         throw new Error(
-          "Fingerprint authentication is not available on this device.",
+          status.reason || "Fingerprint authentication is unavailable.",
         );
       }
 
+      // STEP 2: Start fingerprint enrollment
+      console.log(
+        "[AuthContext] Calling biometricAuth.enableBiometricLogin()...",
+      );
+
       await biometricAuth.enableBiometricLogin();
 
-      // Verify that registration was saved.
+      console.log("[AuthContext] Fingerprint authentication completed.");
+
+      // STEP 3: Verify saved credentials
+      console.log("[AuthContext] Verifying secure storage...");
+
       const enabled = await biometricAuth.isBiometricEnabled();
+
+      console.log("[AuthContext] Secure storage result:", enabled);
 
       if (!enabled) {
         throw new Error(
@@ -372,10 +407,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         );
       }
 
+      // STEP 4: Update React state
       setIsBiometricAvailable(true);
       setIsBiometricEnabled(true);
+
+      console.log("[AuthContext] SUCCESS: Fingerprint login enabled.");
+    } catch (error) {
+      console.error("[AuthContext] FINGERPRINT ENROLLMENT FAILED:", error);
+
+      throw error;
     } finally {
       setBiometricLoading(false);
+      console.groupEnd();
     }
   }, [user]);
 

@@ -144,7 +144,10 @@ export default function Login() {
   ): Promise<void> => {
     event.preventDefault();
 
-    if (busy) return;
+    if (busy) {
+      console.warn("[Login] Login blocked: application is busy.");
+      return;
+    }
 
     const cleanIdentifier = identifier.trim();
 
@@ -158,15 +161,23 @@ export default function Login() {
       return;
     }
 
+    console.group("[Login] PIN LOGIN AND BIOMETRIC SETUP");
+    console.log("[Login] Starting PIN authentication...");
+    console.log("[Login] Biometric preference:", allowBiometrics);
+
     setSubmitting(true);
 
     try {
-      console.log("[Login] Starting PIN login...");
+      // STEP 1: Authenticate using PIN
+      console.log("[Login] Sending PIN login request...");
 
       const authenticatedUser = await login({
         identifier: cleanIdentifier,
         password,
       });
+
+      console.log("[Login] Backend login response received.");
+      console.log("[Login] User authenticated:", !!authenticatedUser);
 
       const token = authApi.getToken();
 
@@ -176,30 +187,112 @@ export default function Login() {
         );
       }
 
+      console.log("[Login] Authentication token exists:", !!token);
       console.log("[Login] PIN authentication successful.");
 
       toast.success("Login successful.");
 
-      // Check biometric availability after PIN authentication.
-      const biometricStatus = await checkBiometricAvailability();
+      // STEP 2: Only continue if user selected Allow
+      if (allowBiometrics !== true) {
+        console.log("[Login] Biometric setup skipped by user.");
+        return;
+      }
 
-      setBiometricStatusMessage(biometricStatus.error ?? "");
+      console.log("[Login] User selected fingerprint authentication.");
+      console.log("[Login] Checking biometric availability...");
 
-      if (allowBiometrics === true) {
+      // STEP 3: Check native biometric availability
+      try {
+        const biometricStatus = await checkBiometricAvailability();
+
+        console.log("[Login] Biometric availability result:", {
+          available: biometricStatus.available,
+          enabled: biometricStatus.enabled,
+          error: biometricStatus.error,
+        });
+
+        setBiometricStatusMessage(biometricStatus.error ?? "");
+
         if (!biometricStatus.available) {
+          console.warn(
+            "[Login] Fingerprint unavailable:",
+            biometricStatus.error,
+          );
+
           toast.warning(
             biometricStatus.error ||
-              "Please enroll a fingerprint or supported biometric in your phone settings.",
+              "Please enroll a fingerprint in your Android phone settings.",
           );
-        } else if (!biometricStatus.enabled) {
-          setShowBiometricSetup(true);
+
+          return;
         }
+
+        // STEP 4: Check whether fingerprint login is already enabled
+        if (biometricStatus.enabled) {
+          console.log("[Login] Fingerprint login is already enabled.");
+          toast.success("Fingerprint login is already enabled.");
+          return;
+        }
+
+        // STEP 5: Trigger Android fingerprint prompt immediately
+        console.log(
+          "[Login] Starting native fingerprint authentication prompt...",
+        );
+
+        toast.info(
+          "Touch your fingerprint sensor to enable fingerprint login.",
+        );
+
+        await enableBiometricLogin();
+
+        console.log("[Login] Native fingerprint authentication completed.");
+
+        // STEP 6: Verify that secure storage saved the details
+        console.log("[Login] Verifying secure biometric storage...");
+
+        const updatedStatus = await checkBiometricAvailability();
+
+        console.log("[Login] Final biometric status:", {
+          available: updatedStatus.available,
+          enabled: updatedStatus.enabled,
+          error: updatedStatus.error,
+        });
+
+        setBiometricStatusMessage(updatedStatus.error ?? "");
+
+        if (!updatedStatus.enabled) {
+          console.error(
+            "[Login] Fingerprint authentication completed but registration was not confirmed.",
+          );
+
+          toast.warning(
+            "Fingerprint setup could not be confirmed. Please try again.",
+          );
+
+          return;
+        }
+
+        setAllowBiometrics(true);
+
+        console.log("[Login] SUCCESS: Fingerprint login enabled and verified.");
+
+        toast.success("Fingerprint login enabled successfully!");
+      } catch (biometricError: unknown) {
+        // PIN login already succeeded. Do not report it as a PIN failure.
+        console.error("[Login] BIOMETRIC SETUP FAILED:", biometricError);
+
+        toast.warning(
+          getErrorMessage(biometricError) ||
+            "Fingerprint setup failed. You can still log in with your PIN.",
+        );
       }
     } catch (error: unknown) {
-      console.error("[Login] PIN login failed:", error);
+      console.error("[Login] PIN LOGIN FAILED:", error);
       toast.error(getErrorMessage(error));
     } finally {
       setSubmitting(false);
+      console.log("[Login] Login process finished.");
+      console.groupEnd();
     }
   };
 

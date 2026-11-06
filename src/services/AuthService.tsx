@@ -204,12 +204,17 @@ interface BackendUser {
 
 interface AuthResponse {
   success: boolean;
-
   message?: string;
-
   data?: BackendUser;
-
   token?: string;
+  accessToken?: string;
+  expiresIn?: number;
+  session?: {
+    id: string;
+    deviceId?: string;
+    deviceName?: string;
+    expiresAt?: string;
+  };
 }
 
 interface GenericResponse<T = unknown> {
@@ -237,6 +242,11 @@ interface GenericResponse<T = unknown> {
  * 12345 -> invalid
  * abcd -> invalid
  */
+
+const getAccessToken = (data: AuthResponse): string | undefined => {
+  return data.accessToken || data.token;
+};
+
 const isValidPin = (pin: string): boolean => {
   return /^\d{4}$/.test(pin);
 };
@@ -420,14 +430,13 @@ const normalizeNigerianPhone = (phone: string): string => {
   if (value.startsWith("0")) {
     value = `234${value.slice(1)}`;
   } else if (
-
-  /*
-   * 8012345678
-   * 7012345678
-   * 9012345678
-   *
-   * -> 2348012345678
-   */
+    /*
+     * 8012345678
+     * 7012345678
+     * 9012345678
+     *
+     * -> 2348012345678
+     */
     value.startsWith("7") ||
     value.startsWith("8") ||
     value.startsWith("9")
@@ -466,7 +475,6 @@ const register = async (userData: RegisterData): Promise<AuthUser> => {
   ------------------------------------------------------- */
 
   validatePin(userData.password, "PIN");
-
   validatePin(userData.confirmPassword, "Confirm PIN");
 
   if (userData.password !== userData.confirmPassword) {
@@ -492,7 +500,6 @@ const register = async (userData: RegisterData): Promise<AuthUser> => {
   ------------------------------------------------------- */
 
   const email = userData.email?.trim().toLowerCase();
-
   const phone = userData.phone?.trim();
 
   if (!email && !phone) {
@@ -500,7 +507,7 @@ const register = async (userData: RegisterData): Promise<AuthUser> => {
   }
 
   /* -------------------------------------------------------
-     EMAIL
+     VALIDATE EMAIL
   ------------------------------------------------------- */
 
   if (email) {
@@ -512,7 +519,7 @@ const register = async (userData: RegisterData): Promise<AuthUser> => {
   }
 
   /* -------------------------------------------------------
-     PHONE
+     VALIDATE PHONE
   ------------------------------------------------------- */
 
   const normalizedPhone = phone ? normalizeNigerianPhone(phone) : undefined;
@@ -530,33 +537,35 @@ const register = async (userData: RegisterData): Promise<AuthUser> => {
 
     ...(email ? { email } : {}),
 
-    ...(normalizedPhone
-      ? {
-          phone: normalizedPhone,
-        }
-      : {}),
+    ...(normalizedPhone ? { phone: normalizedPhone } : {}),
 
     password: userData.password,
 
     confirmPassword: userData.confirmPassword,
 
-    ...(userData.referralCode
-      ? {
-          referralCode: userData.referralCode,
-        }
+    ...(userData.referralCode?.trim()
+      ? { referralCode: userData.referralCode.trim() }
       : {}),
   };
 
   /* -------------------------------------------------------
      API REQUEST
+     Create user + device session
   ------------------------------------------------------- */
 
   const response = await API.post<AuthResponse>(
     `${USERS_BASE_URL}/register`,
     registerData,
+    {
+      withCredentials: true,
+    },
   );
 
   const data = response.data;
+
+  /* -------------------------------------------------------
+     VALIDATE RESPONSE
+  ------------------------------------------------------- */
 
   if (!data?.success) {
     throw new Error(data?.message || "Registration failed.");
@@ -566,11 +575,27 @@ const register = async (userData: RegisterData): Promise<AuthUser> => {
     throw new Error("Authenticated user ID was not returned.");
   }
 
-  if (!data.token) {
+  /* -------------------------------------------------------
+     GET ACCESS TOKEN
+  ------------------------------------------------------- */
+
+  const accessToken = data.accessToken || data.token;
+
+  if (!accessToken) {
     throw new Error("Authentication token was not returned.");
   }
 
-  return saveAuth(data.data, data.token);
+  /* -------------------------------------------------------
+     SAVE AUTHENTICATED USER
+  ------------------------------------------------------- */
+
+  const authenticatedUser = saveAuth(data.data, accessToken);
+
+  /* -------------------------------------------------------
+     RETURN AUTHENTICATED USER
+  ------------------------------------------------------- */
+
+  return authenticatedUser;
 };
 
 /* =========================================================
@@ -595,14 +620,13 @@ const login = async (userData: LoginData): Promise<AuthUser> => {
   }
 
   /*
-   * If identifier is an email,
-   * leave it unchanged.
-   *
-   * If it is a phone number,
-   * normalize it to +234XXXXXXXXXX.
+   * Email: lowercase and normalize.
+   * Phone: convert to Nigerian +234 format.
    */
 
-  const normalizedIdentifier = identifier.includes("@")
+  const isEmail = identifier.includes("@");
+
+  const normalizedIdentifier = isEmail
     ? identifier.toLowerCase()
     : normalizeNigerianPhone(identifier);
 
@@ -610,29 +634,31 @@ const login = async (userData: LoginData): Promise<AuthUser> => {
      VALIDATE PHONE
   ------------------------------------------------------- */
 
-  if (
-    !identifier.includes("@") &&
-    !isValidNigerianPhone(normalizedIdentifier)
-  ) {
+  if (!isEmail && !isValidNigerianPhone(normalizedIdentifier)) {
     throw new Error("Please enter a valid Nigerian phone number or email.");
   }
 
   /* -------------------------------------------------------
      API REQUEST
+     Authenticate user + create device session
   ------------------------------------------------------- */
 
-  const response = await API.post<AuthResponse>(`${USERS_BASE_URL}/login`, {
-    identifier: normalizedIdentifier,
-
-    /*
-     * Send the 4-digit PIN
-     * using the backend's existing
-     * "password" field.
-     */
-    password: userData.password,
-  });
+  const response = await API.post<AuthResponse>(
+    `${USERS_BASE_URL}/login`,
+    {
+      identifier: normalizedIdentifier,
+      password: userData.password,
+    },
+    {
+      withCredentials: true,
+    },
+  );
 
   const data = response.data;
+
+  /* -------------------------------------------------------
+     VALIDATE RESPONSE
+  ------------------------------------------------------- */
 
   if (!data?.success) {
     throw new Error(data?.message || "Login failed.");
@@ -642,11 +668,60 @@ const login = async (userData: LoginData): Promise<AuthUser> => {
     throw new Error("Authenticated user ID was not returned.");
   }
 
-  if (!data.token) {
+  /* -------------------------------------------------------
+     GET ACCESS TOKEN
+  ------------------------------------------------------- */
+
+  const accessToken = data.accessToken || data.token;
+
+  if (!accessToken) {
     throw new Error("Authentication token was not returned.");
   }
 
-  return saveAuth(data.data, data.token);
+  /* -------------------------------------------------------
+     SAVE AUTHENTICATED USER
+  ------------------------------------------------------- */
+
+  const authenticatedUser = saveAuth(data.data, accessToken);
+
+  /* -------------------------------------------------------
+     RETURN USER
+  ------------------------------------------------------- */
+
+  return authenticatedUser;
+};
+
+/* =========================================================
+   REFRESH ACCESS TOKEN
+========================================================= */
+
+const refreshAccessToken = async (): Promise<string> => {
+  const response = await API.post<AuthResponse>(
+    `${USERS_BASE_URL}/refresh-token`,
+    {},
+    { withCredentials: true },
+  );
+
+  const data = response.data;
+  const accessToken = getAccessToken(data);
+
+  if (!data?.success || !accessToken) {
+    clearAuth();
+    throw new Error("Session expired. Please log in again.");
+  }
+
+  // Replace the expired access token.
+  localStorage.setItem(TOKEN_KEY, accessToken);
+
+  // Keep the stored user token in sync.
+  const storedUser = getUser();
+
+  if (storedUser) {
+    storedUser.token = accessToken;
+    localStorage.setItem(USER_KEY, JSON.stringify(storedUser));
+  }
+
+  return accessToken;
 };
 
 /* =========================================================
@@ -655,11 +730,19 @@ const login = async (userData: LoginData): Promise<AuthUser> => {
 
 const logout = async (): Promise<void> => {
   try {
-    await API.post(`${USERS_BASE_URL}/logout`);
+    await API.post(
+      `${USERS_BASE_URL}/logout`,
+      {},
+      {
+        withCredentials: true,
+      },
+    );
+  } catch (error) {
+    console.error("Logout request failed:", error);
   } finally {
     /*
      * Always clear local authentication,
-     * even when the backend request fails.
+     * even if the backend is unavailable.
      */
 
     clearAuth();
@@ -748,14 +831,14 @@ const verifyPhone = async (
   );
 
   const data = response.data;
+  const accessToken = getAccessToken(data);
 
   /*
    * Some backends return a fresh
    * authenticated user/token.
    */
-
-  if (data?.success && data.data?._id && data.token) {
-    return saveAuth(data.data, data.token);
+  if (data?.success && data.data?._id && accessToken) {
+    return saveAuth(data.data, accessToken);
   }
 
   return data;
@@ -1013,6 +1096,7 @@ const authApi = {
   restoreBiometricSession,
   saveAuth,
   clearAuth,
+  refreshAccessToken,
 };
 
 export default authApi;

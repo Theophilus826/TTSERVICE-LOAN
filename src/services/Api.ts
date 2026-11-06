@@ -1,4 +1,6 @@
 
+/// <reference types="vite/client" />
+
 import axios, {
   AxiosError,
   InternalAxiosRequestConfig,
@@ -7,14 +9,6 @@ import axios, {
 /* =========================================================
    ENVIRONMENT
 ========================================================= */
-
-interface ImportMetaEnv {
-  readonly VITE_API_URL?: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
@@ -37,6 +31,7 @@ const USER_ID_KEY = "userId";
 
 type RetryableRequest = InternalAxiosRequestConfig & {
   _fallbackTried?: boolean;
+  _retry?: boolean;
 };
 
 interface ApiErrorResponse {
@@ -50,6 +45,11 @@ interface ApiErrorResponse {
   };
 }
 
+interface RefreshResponse {
+  accessToken?: string;
+  token?: string;
+}
+
 /* =========================================================
    AXIOS INSTANCE
 ========================================================= */
@@ -60,9 +60,6 @@ const API = axios.create({
   headers: {
     Accept: "application/json",
   },
-
-  // Supports secure cookies when the backend uses
-  // cookie-based authentication.
   withCredentials: true,
 });
 
@@ -85,9 +82,81 @@ const clearLocalSession = (): void => {
 const isPublicAuthEndpoint = (
   url = "",
 ): boolean => {
-  return /\/users\/(login|register|forgot-password|reset-password)(\/|$)/i.test(
+  return /\/users\/(login|register|forgot-password|reset-password|refresh-token)(\/|$)/i.test(
     url,
   );
+};
+
+/* =========================================================
+   REFRESH TOKEN MANAGEMENT
+========================================================= */
+
+// Ensures multiple failed requests share one refresh call.
+let refreshPromise: Promise<string> | null = null;
+
+const refreshAccessToken = async (): Promise<string> => {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post<RefreshResponse>(
+        `${API_BASE_URL.replace(/\/+$/, "")}/users/refresh-token`,
+        {},
+        {
+          withCredentials: true,
+          timeout: 30_000,
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        },
+      )
+      .then((response) => {
+        const newToken =
+          response.data?.accessToken ||
+          response.data?.token;
+
+        if (
+          !newToken ||
+          typeof newToken !== "string"
+        ) {
+          throw new Error(
+            "New access token was not returned.",
+          );
+        }
+
+        localStorage.setItem(
+          TOKEN_KEY,
+          newToken,
+        );
+
+        // Keep the stored user object synchronized.
+        const storedUser =
+          localStorage.getItem(USER_KEY);
+
+        if (storedUser) {
+          try {
+            const user = JSON.parse(storedUser);
+
+            user.token = newToken;
+
+            localStorage.setItem(
+              USER_KEY,
+              JSON.stringify(user),
+            );
+          } catch {
+            console.warn(
+              "Could not update stored user token.",
+            );
+          }
+        }
+
+        return newToken;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
 };
 
 /* =========================================================
@@ -108,10 +177,7 @@ API.interceptors.request.use(
       delete config.headers.Authorization;
     }
 
-    /*
-     * Let the browser generate the multipart boundary
-     * for FormData uploads.
-     */
+    // Let the browser generate multipart boundaries.
     if (
       typeof FormData !== "undefined" &&
       config.data instanceof FormData
@@ -150,9 +216,14 @@ API.interceptors.response.use(
 
   async (error: AxiosError) => {
     const status = error.response?.status;
+
     const original = error.config as
       | RetryableRequest
       | undefined;
+
+    if (!original) {
+      return Promise.reject(error);
+    }
 
     /* -----------------------------------------------------
        LOCALHOST -> RENDER FALLBACK
@@ -165,7 +236,6 @@ API.interceptors.response.use(
     if (
       !error.response &&
       usingLocalBackend &&
-      original &&
       !original._fallbackTried
     ) {
       original._fallbackTried = true;
@@ -176,13 +246,6 @@ API.interceptors.response.use(
           baseURL: API_FALLBACK_URL,
           headers: {
             ...original.headers,
-            ...(localStorage.getItem(TOKEN_KEY)
-              ? {
-                  Authorization: `Bearer ${localStorage.getItem(
-                    TOKEN_KEY,
-                  )}`,
-                }
-              : {}),
           },
         });
       } catch (fallbackError) {
@@ -191,15 +254,37 @@ API.interceptors.response.use(
     }
 
     /* -----------------------------------------------------
-       UNAUTHORIZED
+       UNAUTHORIZED - REFRESH ACCESS TOKEN
     ----------------------------------------------------- */
 
     if (
       status === 401 &&
-      original &&
       !isPublicAuthEndpoint(original.url)
     ) {
-      notifyUnauthorized();
+      // Prevent infinite retry loops.
+      if (original._retry) {
+        notifyUnauthorized();
+        return Promise.reject(error);
+      }
+
+      original._retry = true;
+
+      try {
+        // Refresh only once, even if multiple requests fail.
+        const newToken = await refreshAccessToken();
+
+        // Update the original request.
+        original.headers.Authorization =
+          `Bearer ${newToken}`;
+
+        // Retry the failed request.
+        return API.request(original);
+
+      } catch (refreshError) {
+        notifyUnauthorized();
+
+        return Promise.reject(refreshError);
+      }
     }
 
     /* -----------------------------------------------------
@@ -208,7 +293,7 @@ API.interceptors.response.use(
 
     if (status === 403) {
       console.warn("API request forbidden.", {
-        url: original?.url,
+        url: original.url,
       });
     }
 
@@ -222,7 +307,7 @@ API.interceptors.response.use(
     ) {
       console.error("API server error.", {
         status,
-        url: original?.url,
+        url: original.url,
       });
     }
 
@@ -283,7 +368,10 @@ export const getApiErrorMessage = (
     }
   }
 
-  if (error instanceof Error && error.message.trim()) {
+  if (
+    error instanceof Error &&
+    error.message.trim()
+  ) {
     return error.message;
   }
 

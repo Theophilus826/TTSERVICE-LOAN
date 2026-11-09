@@ -5,11 +5,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-
 import android.os.Build;
-
 import android.provider.Settings;
-
 import android.util.Log;
 
 public class FloatingReminderReceiver extends BroadcastReceiver {
@@ -21,137 +18,184 @@ public class FloatingReminderReceiver extends BroadcastReceiver {
     private static final String CONSENT_PREFS =
             "menumoney_floating_consent";
 
+    public static final String ACTION_RESTORE =
+            "com.menumoney.RESTORE_AFTER_BOOT";
+
     @Override
     public void onReceive(Context context, Intent intent) {
 
-        if (context == null) {
+        if (context == null || intent == null) {
             return;
         }
 
-        // -----------------------------------------------------
-        // READ CUSTOMER PREFERENCES
-        // -----------------------------------------------------
+        String action = intent.getAction();
 
-        SharedPreferences prefs = context.getSharedPreferences(
-                PREFS,
-                Context.MODE_PRIVATE
-        );
+        boolean restoring = ACTION_RESTORE.equals(action);
 
-        SharedPreferences consentPrefs = context.getSharedPreferences(
-                CONSENT_PREFS,
-                Context.MODE_PRIVATE
-        );
+        Log.d(TAG, restoring
+                ? "Restoring loan reminders after boot/update."
+                : "Loan reminder broadcast received: " + action);
 
-        String userId = prefs.getString(
-                "activeUserId",
-                ""
-        );
+        try {
 
-        // -----------------------------------------------------
-        // CHECK CUSTOMER CONSENT
-        // -----------------------------------------------------
+            // =============================================
+            // READ LOCALLY SAVED CUSTOMER DATA
+            // =============================================
 
-        boolean consent = !userId.isEmpty()
-                && consentPrefs.getBoolean(
-                "enabled_" + userId,
-                false
-        );
+            SharedPreferences prefs =
+                    context.getSharedPreferences(
+                            PREFS,
+                            Context.MODE_PRIVATE
+                    );
 
-        // -----------------------------------------------------
-        // CHECK REMINDER REQUIREMENTS
-        // -----------------------------------------------------
+            SharedPreferences consentPrefs =
+                    context.getSharedPreferences(
+                            CONSENT_PREFS,
+                            Context.MODE_PRIVATE
+                    );
 
-        boolean reminderEnabled = prefs.getBoolean(
-                "floatingReminderEnabled",
-                false
-        );
+            String userId = prefs.getString(
+                    "activeUserId",
+                    ""
+            );
 
-        boolean paymentDue = prefs.getBoolean(
-                "paymentDue",
-                false
-        );
+            // =============================================
+            // CHECK CUSTOMER CONSENT
+            // =============================================
 
-        boolean hasCustomerData = prefs.getBoolean(
-                "hasCustomerData",
-                false
-        );
+            boolean consent = !userId.isEmpty()
+                    && consentPrefs.getBoolean(
+                            "enabled_" + userId,
+                            false
+                    );
 
-        boolean overlayPermission = Settings.canDrawOverlays(
-                context
-        );
+            // =============================================
+            // CHECK REMINDER SETTINGS
+            // =============================================
 
-        boolean allowed =
-                reminderEnabled
-                        && paymentDue
-                        && hasCustomerData
-                        && consent
-                        && overlayPermission;
+            boolean reminderEnabled = prefs.getBoolean(
+                    "floatingReminderEnabled",
+                    false
+            );
 
-        // -----------------------------------------------------
-        // READ SNOOZE TIME
-        // -----------------------------------------------------
+            boolean paymentDue = prefs.getBoolean(
+                    "paymentDue",
+                    false
+            );
 
-        long snoozeUntil = prefs.getLong(
-                "reminderSnoozeUntil",
-                0L
-        );
+            boolean hasCustomerData = prefs.getBoolean(
+                    "hasCustomerData",
+                    false
+            );
 
-        // -----------------------------------------------------
-        // STOP IF REMINDER CONDITIONS ARE NOT SATISFIED
-        // -----------------------------------------------------
+            // =============================================
+            // CHECK OVERLAY PERMISSION
+            // =============================================
 
-        if (!allowed) {
+            boolean overlayPermission =
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                            || Settings.canDrawOverlays(context);
+
+            // =============================================
+            // VALIDATE REMINDER CONDITIONS
+            // =============================================
+
+            boolean allowed =
+                    reminderEnabled
+                            && paymentDue
+                            && hasCustomerData
+                            && consent
+                            && overlayPermission;
+
+            // =============================================
+            // READ SAVED SNOOZE TIME
+            // =============================================
+
+            long snoozeUntil = prefs.getLong(
+                    "reminderSnoozeUntil",
+                    0L
+            );
+
+            long currentTime = System.currentTimeMillis();
+
+            // =============================================
+            // STOP IF REMINDER IS NOT ALLOWED
+            // =============================================
+
+            if (!allowed) {
+
+                Log.d(
+                        TAG,
+                        "Reminder disabled or required conditions missing."
+                );
+
+                FloatingReminderService.cancelReminderRecheck(
+                        context
+                );
+
+                stopReminderService(context);
+
+                return;
+            }
+
+            // =============================================
+            // RESTORE ACTIVE SNOOZE AFTER REBOOT
+            // =============================================
+
+            if (snoozeUntil > currentTime) {
+
+                Log.d(
+                        TAG,
+                        "Restoring snoozed reminder until: "
+                                + snoozeUntil
+                );
+
+                // Recreate the snooze recheck alarm locally.
+                FloatingReminderService.scheduleReminderRecheck(
+                        context,
+                        snoozeUntil
+                );
+
+                return;
+            }
+
+            // =============================================
+            // CLEAR EXPIRED SNOOZE
+            // =============================================
+
+            if (snoozeUntil != 0L) {
+
+                prefs.edit()
+                        .putLong("reminderSnoozeUntil", 0L)
+                        .apply();
+            }
+
+            // =============================================
+            // START REMINDER SERVICE
+            // =============================================
 
             Log.d(
                     TAG,
-                    "Reminder conditions are no longer satisfied."
+                    restoring
+                            ? "Boot restoration successful. Starting reminder service."
+                            : "Reminder conditions satisfied. Starting service."
             );
 
-            FloatingReminderService.cancelReminderRecheck(
-                    context
-            );
-
-            // Ask the service to recheck its own conditions and
-            // remove an existing overlay if necessary.
             startReminderService(context);
 
-            return;
-        }
+        } catch (Exception e) {
 
-        // -----------------------------------------------------
-        // CHECK SNOOZE PERIOD
-        // -----------------------------------------------------
-
-        if (System.currentTimeMillis() < snoozeUntil) {
-
-            Log.d(
+            Log.e(
                     TAG,
-                    "Reminder is snoozed until: " + snoozeUntil
+                    "Error processing loan reminder broadcast.",
+                    e
             );
-
-            FloatingReminderService.scheduleReminderRecheck(
-                    context,
-                    snoozeUntil
-            );
-
-            return;
         }
-
-        // -----------------------------------------------------
-        // START FLOATING REMINDER SERVICE
-        // -----------------------------------------------------
-
-        Log.d(
-                TAG,
-                "Reminder conditions satisfied. Starting service."
-        );
-
-        startReminderService(context);
     }
 
-    // =========================================================
+    // =====================================================
     // START FLOATING REMINDER SERVICE
-    // =========================================================
+    // =====================================================
 
     private void startReminderService(Context context) {
 
@@ -164,22 +208,53 @@ public class FloatingReminderReceiver extends BroadcastReceiver {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 
-                context.startForegroundService(
-                        serviceIntent
-                );
+                context.startForegroundService(serviceIntent);
 
             } else {
 
-                context.startService(
-                        serviceIntent
-                );
+                context.startService(serviceIntent);
             }
+
+            Log.d(
+                    TAG,
+                    "Floating reminder service start requested."
+            );
 
         } catch (Exception e) {
 
             Log.e(
                     TAG,
                     "Could not start floating reminder service.",
+                    e
+            );
+        }
+    }
+
+    // =====================================================
+    // STOP FLOATING REMINDER SERVICE
+    // =====================================================
+
+    private void stopReminderService(Context context) {
+
+        try {
+
+            Intent serviceIntent = new Intent(
+                    context,
+                    FloatingReminderService.class
+            );
+
+            context.stopService(serviceIntent);
+
+            Log.d(
+                    TAG,
+                    "Floating reminder service stopped."
+            );
+
+        } catch (Exception e) {
+
+            Log.e(
+                    TAG,
+                    "Could not stop floating reminder service.",
                     e
             );
         }

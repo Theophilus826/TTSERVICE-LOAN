@@ -167,21 +167,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     enabled: boolean;
     error?: string;
   }> => {
-    console.group("[AuthContext] CHECK BIOMETRIC AVAILABILITY");
+    
 
     try {
-      console.log("[AuthContext] Calling getBiometricStatus...");
 
       const status = await biometricAuth.getBiometricStatus();
 
-      console.log("[AuthContext] Device status:", {
-        available: status.isAvailable,
-        biometryType: status.biometryType,
-        biometryTypes: status.biometryTypes,
-        deviceIsSecure: status.deviceIsSecure,
-        reason: status.reason,
-        code: status.code,
-      });
+      
 
       let enabled = false;
 
@@ -194,10 +186,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsBiometricAvailable(status.isAvailable);
       setIsBiometricEnabled(enabled);
 
-      console.log("[AuthContext] Final biometric state:", {
-        available: status.isAvailable,
-        enabled,
-      });
+      
 
       return {
         available: status.isAvailable,

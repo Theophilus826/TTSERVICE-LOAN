@@ -1,3 +1,4 @@
+
 package com.menumoney;
 
 import android.content.Intent;
@@ -7,37 +8,51 @@ import android.os.Bundle;
 import android.provider.Settings;
 
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.PluginMethod;
-import com.getcapacitor.PluginCall;
-import com.getcapacitor.annotation.CapacitorPlugin;
-import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.JSObject;
+
+import com.getcapacitor.annotation.CapacitorPlugin;
 
 public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+
+        // Register custom native Capacitor plugins.
         registerPlugin(LoanWidgetPlugin.class);
         registerPlugin(NativeHeartbeatPlugin.class);
         registerPlugin(OverlayPermissionPlugin.class);
+
+        // Calendar plugin is implemented in LoanCalendarPlugin.java.
+        registerPlugin(LoanCalendarPlugin.class);
+
         super.onCreate(savedInstanceState);
     }
+
+    // =====================================================
+    // OVERLAY PERMISSION PLUGIN
+    // =====================================================
 
     @CapacitorPlugin(name = "OverlayPermission")
     public static class OverlayPermissionPlugin extends Plugin {
 
         @PluginMethod
         public void checkPermission(PluginCall call) {
+
             boolean granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.M
                     || Settings.canDrawOverlays(getContext());
 
             JSObject result = new JSObject();
             result.put("granted", granted);
+
             call.resolve(result);
         }
 
         @PluginMethod
         public void requestPermission(PluginCall call) {
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
                     && !Settings.canDrawOverlays(getContext())) {
 

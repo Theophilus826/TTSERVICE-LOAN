@@ -11,6 +11,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -28,6 +29,8 @@ import android.view.Gravity;
 import android.view.WindowManager;
 
 import android.widget.TextView;
+import android.widget.Button;
+import android.widget.LinearLayout;
 
 public class FloatingReminderService extends Service {
 
@@ -49,6 +52,7 @@ public class FloatingReminderService extends Service {
 
     private WindowManager windowManager;
     private TextView floatingView;
+    private LinearLayout floatingContainer;
 
     // =========================================================
     // ALARM MANAGEMENT
@@ -131,7 +135,6 @@ public class FloatingReminderService extends Service {
 
     // =========================================================
     // REFRESH APPEARANCE
-    // Call after saving new settings to SharedPreferences.
     // =========================================================
 
     public static void refreshAppearance(Context context) {
@@ -227,9 +230,7 @@ public class FloatingReminderService extends Service {
                 0L
         );
 
-        // -----------------------------------------------------
         // CHECK COOLDOWN
-        // -----------------------------------------------------
 
         if (System.currentTimeMillis() < reminderSnoozeUntil) {
 
@@ -245,9 +246,7 @@ public class FloatingReminderService extends Service {
             return START_NOT_STICKY;
         }
 
-        // -----------------------------------------------------
         // VALIDATE REMINDER REQUIREMENTS
-        // -----------------------------------------------------
 
         if (!enabled
                 || !consent
@@ -264,9 +263,7 @@ public class FloatingReminderService extends Service {
             return START_NOT_STICKY;
         }
 
-        // -----------------------------------------------------
         // DISPLAY OR REFRESH REMINDER
-        // -----------------------------------------------------
 
         cancelReminderRecheck(this);
 
@@ -283,9 +280,7 @@ public class FloatingReminderService extends Service {
 
         removeReminder();
 
-        // -----------------------------------------------------
         // CUSTOMER REPAYMENT INFORMATION
-        // -----------------------------------------------------
 
         String amount = prefs.getString(
                 "amount",
@@ -312,9 +307,7 @@ public class FloatingReminderService extends Service {
                 ""
         );
 
-        // -----------------------------------------------------
         // ACCOUNT NUMBER DISPLAY OPTION
-        // -----------------------------------------------------
 
         boolean maskAccountNumber = prefs.getBoolean(
                 "maskReminderAccountNumber",
@@ -325,9 +318,7 @@ public class FloatingReminderService extends Service {
             accountNumber = maskAccount(accountNumber);
         }
 
-        // -----------------------------------------------------
         // BUILD REMINDER CONTENT
-        // -----------------------------------------------------
 
         StringBuilder reminderContent = new StringBuilder();
 
@@ -358,9 +349,7 @@ public class FloatingReminderService extends Service {
 
         reminderContent.append("\n\nOpen MenuMoney for details");
 
-        // -----------------------------------------------------
         // ADMIN-CONTROLLED APPEARANCE SETTINGS
-        // -----------------------------------------------------
 
         int widthDp = prefs.getInt(
                 "reminderWidth",
@@ -392,9 +381,7 @@ public class FloatingReminderService extends Service {
                 14f
         );
 
-        // -----------------------------------------------------
         // BACKGROUND COLOUR
-        // -----------------------------------------------------
 
         String backgroundHex = prefs.getString(
                 "reminderBackgroundHex",
@@ -418,17 +405,11 @@ public class FloatingReminderService extends Service {
             backgroundColor = Color.rgb(23, 59, 104);
         }
 
-        // -----------------------------------------------------
         // TEXT COLOUR
-        // Supports HEX strings and old integer preferences.
-        // -----------------------------------------------------
 
         int textColor = getReminderTextColor(prefs);
 
-        // -----------------------------------------------------
         // VALIDATE APPEARANCE VALUES
-        // Keep these limits aligned with backend validation.
-        // -----------------------------------------------------
 
         widthDp = Math.max(200, Math.min(widthDp, 600));
 
@@ -457,9 +438,7 @@ public class FloatingReminderService extends Service {
                 Math.min(textSize, 30f)
         );
 
-        // -----------------------------------------------------
         // CONVERT DP TO PIXELS
-        // -----------------------------------------------------
 
         int widthPx = dpToPx(widthDp);
 
@@ -475,9 +454,17 @@ public class FloatingReminderService extends Service {
                 cornerRadiusDp
         );
 
-        // -----------------------------------------------------
-        // CREATE REMINDER VIEW
-        // -----------------------------------------------------
+        // =====================================================
+        // CREATE REMINDER CONTAINER
+        // =====================================================
+
+        floatingContainer = new LinearLayout(this);
+
+        floatingContainer.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        // EXISTING REMINDER TEXT
 
         floatingView = new TextView(this);
 
@@ -505,13 +492,7 @@ public class FloatingReminderService extends Service {
 
         floatingView.setMaxWidth(widthPx);
 
-        floatingView.setElevation(
-                dpToPx(8)
-        );
-
-        // -----------------------------------------------------
         // ROUNDED BACKGROUND
-        // -----------------------------------------------------
 
         GradientDrawable background = new GradientDrawable();
 
@@ -521,11 +502,75 @@ public class FloatingReminderService extends Service {
                 cornerRadiusPx
         );
 
-        floatingView.setBackground(background);
+        floatingContainer.setBackground(background);
 
-        // -----------------------------------------------------
+        // ADD REMINDER TEXT TO CONTAINER
+
+        floatingContainer.addView(
+                floatingView,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        // =====================================================
+        // OPEN BUTTON AT BOTTOM
+        // =====================================================
+
+        Button openButton = new Button(this);
+
+        openButton.setText("OPEN");
+
+        openButton.setAllCaps(true);
+
+        // WHITE BUTTON BACKGROUND
+
+        openButton.setBackgroundTintList(
+                ColorStateList.valueOf(Color.WHITE)
+        );
+
+        // DARK BLUE BUTTON TEXT
+
+        openButton.setTextColor(
+                Color.rgb(23, 59, 104)
+        );
+
+        // OPEN MENUMONEY APPLICATION
+
+        openButton.setOnClickListener(v -> {
+
+            Intent openIntent = new Intent(
+                    FloatingReminderService.this,
+                    MainActivity.class
+            );
+
+            openIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK |
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP
+            );
+
+            startActivity(openIntent);
+
+        });
+
+        // ADD BUTTON BELOW REMINDER TEXT
+
+        floatingContainer.addView(
+                openButton,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        floatingContainer.setElevation(
+                dpToPx(8)
+        );
+
+        // =====================================================
         // OVERLAY WINDOW PARAMETERS
-        // -----------------------------------------------------
+        // =====================================================
 
         int overlayType;
 
@@ -560,16 +605,16 @@ public class FloatingReminderService extends Service {
 
         params.y = dpToPx(positionYDp);
 
-        // -----------------------------------------------------
+        // =====================================================
         // ADD OVERLAY TO SCREEN
-        // -----------------------------------------------------
+        // =====================================================
 
         try {
 
             if (windowManager != null) {
 
                 windowManager.addView(
-                        floatingView,
+                        floatingContainer,
                         params
                 );
 
@@ -608,6 +653,7 @@ public class FloatingReminderService extends Service {
                     e
             );
 
+            floatingContainer = null;
             floatingView = null;
 
             stopSelf();
@@ -641,6 +687,7 @@ public class FloatingReminderService extends Service {
         }
 
         // Backward compatibility with previous integer values.
+
         if (storedValue instanceof Integer) {
             return (Integer) storedValue;
         }
@@ -746,11 +793,11 @@ public class FloatingReminderService extends Service {
 
     private void removeReminder() {
 
-        if (floatingView != null && windowManager != null) {
+        if (floatingContainer != null && windowManager != null) {
 
             try {
 
-                windowManager.removeView(floatingView);
+                windowManager.removeView(floatingContainer);
 
             } catch (Exception e) {
 
@@ -761,6 +808,7 @@ public class FloatingReminderService extends Service {
                 );
             }
 
+            floatingContainer = null;
             floatingView = null;
         }
     }

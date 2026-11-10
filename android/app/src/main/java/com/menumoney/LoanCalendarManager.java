@@ -1,4 +1,3 @@
-
 package com.menumoney;
 
 import android.Manifest;
@@ -25,11 +24,8 @@ import java.util.TimeZone;
 public final class LoanCalendarManager {
 
     private static final String TAG = "LoanCalendarManager";
-
     private static final String PREFS = "menumoney_loan_widget";
-
-    private static final String EVENT_URI =
-            "menumoney://loan/next-payment";
+    private static final String EVENT_URI = "menumoney://loan/next-payment";
 
     public static final int REQUEST_CALENDAR_PERMISSION = 7317;
 
@@ -48,7 +44,6 @@ public final class LoanCalendarManager {
         return context.checkSelfPermission(
                 Manifest.permission.READ_CALENDAR
         ) == PackageManager.PERMISSION_GRANTED
-
                 && context.checkSelfPermission(
                 Manifest.permission.WRITE_CALENDAR
         ) == PackageManager.PERMISSION_GRANTED;
@@ -66,7 +61,7 @@ public final class LoanCalendarManager {
         }
 
         activity.requestPermissions(
-                new String[] {
+                new String[]{
                         Manifest.permission.READ_CALENDAR,
                         Manifest.permission.WRITE_CALENDAR
                 },
@@ -81,14 +76,11 @@ public final class LoanCalendarManager {
     public static void syncFromPreferences(Context context) {
 
         if (!hasCalendarPermission(context)) {
-
             Log.w(TAG, "Calendar permission has not been granted.");
-
             return;
         }
 
         try {
-
             android.content.SharedPreferences prefs =
                     context.getSharedPreferences(
                             PREFS,
@@ -105,25 +97,17 @@ public final class LoanCalendarManager {
                     false
             );
 
-            // Remove our event when there is no unpaid payment.
             if (!hasCustomerData || !paymentDue) {
-
                 removeLoanEvent(context);
-
                 return;
             }
 
-            String dueDate = prefs.getString(
-                    "dueDate",
-                    ""
-            );
+            String dueDate = prefs.getString("dueDate", "");
 
             Calendar dueCalendar = parseDueDate(dueDate);
 
             if (dueCalendar == null) {
-
                 Log.e(TAG, "Invalid loan due date: " + dueDate);
-
                 return;
             }
 
@@ -147,8 +131,7 @@ public final class LoanCalendarManager {
                     ""
             );
 
-            // Never expose the complete account number
-            // in the phone calendar.
+            // Never expose the complete account number.
             if (!accountNumber.isEmpty()) {
 
                 String digits = accountNumber.replaceAll(
@@ -171,11 +154,9 @@ public final class LoanCalendarManager {
             );
 
         } catch (SecurityException e) {
-
             Log.e(TAG, "Calendar access denied.", e);
 
         } catch (Exception e) {
-
             Log.e(TAG, "Calendar synchronization failed.", e);
         }
     }
@@ -200,10 +181,10 @@ public final class LoanCalendarManager {
         eventStart.set(Calendar.SECOND, 0);
         eventStart.set(Calendar.MILLISECOND, 0);
 
-        startTime = eventStart.getTimeInMillis();
+        // FIX: Declare startTime before using it.
+        long startTime = eventStart.getTimeInMillis();
 
         Calendar eventEnd = (Calendar) eventStart.clone();
-
         eventEnd.add(Calendar.MINUTE, 30);
 
         String title = "MenuMoney Loan Repayment - " + amount;
@@ -237,15 +218,9 @@ public final class LoanCalendarManager {
         long calendarId = findWritableCalendar(context);
 
         if (calendarId < 0) {
-
             Log.e(TAG, "No writable phone calendar was found.");
-
             return;
         }
-
-        // ============================================
-        // FIND EXISTING MENUMONEY EVENT
-        // ============================================
 
         Long existingEventId = findExistingEvent(context);
 
@@ -357,9 +332,7 @@ public final class LoanCalendarManager {
             );
 
             if (eventUri == null) {
-
                 Log.e(TAG, "Could not create calendar event.");
-
                 return;
             }
 
@@ -429,13 +402,15 @@ public final class LoanCalendarManager {
                 );
             }
 
+        } catch (Exception e) {
+            Log.e(TAG, "Could not find a writable calendar.", e);
         }
 
         return -1L;
     }
 
     // ================================================
-    // FIND EXISTING EVENT USING UNIQUE APP IDENTIFIER
+    // FIND EXISTING EVENT
     // ================================================
 
     private static Long findExistingEvent(Context context) {
@@ -466,12 +441,12 @@ public final class LoanCalendarManager {
             if (cursor != null) {
 
                 while (cursor.moveToNext()) {
-
-                    eventIds.add(
-                            cursor.getLong(0)
-                    );
+                    eventIds.add(cursor.getLong(0));
                 }
             }
+
+        } catch (Exception e) {
+            Log.e(TAG, "Could not find existing calendar event.", e);
         }
 
         if (eventIds.isEmpty()) {
@@ -482,7 +457,6 @@ public final class LoanCalendarManager {
         Long primaryId = eventIds.get(0);
 
         for (int i = 1; i < eventIds.size(); i++) {
-
             deleteOwnedEvent(context, eventIds.get(i));
         }
 
@@ -499,8 +473,7 @@ public final class LoanCalendarManager {
             long calendarId
     ) {
 
-        Uri remindersUri =
-                CalendarContract.Reminders.CONTENT_URI;
+        Uri remindersUri = CalendarContract.Reminders.CONTENT_URI;
 
         int[] reminderMinutes = {
                 1440,
@@ -528,7 +501,6 @@ public final class LoanCalendarManager {
 
             try {
 
-                // Check whether this calendar supports ALERT reminders.
                 if (!supportsAlertReminder(context, calendarId)) {
 
                     Log.w(
@@ -545,7 +517,6 @@ public final class LoanCalendarManager {
                 );
 
             } catch (Exception e) {
-
                 Log.e(TAG, "Could not add calendar reminder.", e);
             }
         }
@@ -560,8 +531,9 @@ public final class LoanCalendarManager {
             long calendarId
     ) {
 
+        // FIX: Use the provider column name as a string.
         String[] projection = {
-                CalendarContract.Calendars.CALENDAR_ALLOWED_REMINDERS
+                "allowedReminders"
         };
 
         String selection =
@@ -585,16 +557,18 @@ public final class LoanCalendarManager {
 
                 for (String method : allowed.split(",")) {
 
-                    if (CalendarContract.Reminders.METHOD_ALERT
-                            == Integer.parseInt(method.trim())) {
-
-                        return true;
+                    try {
+                        if (CalendarContract.Reminders.METHOD_ALERT
+                                == Integer.parseInt(method.trim())) {
+                            return true;
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // Ignore invalid provider values.
                     }
                 }
             }
 
         } catch (Exception e) {
-
             Log.e(TAG, "Could not check calendar reminder support.", e);
         }
 
@@ -635,9 +609,9 @@ public final class LoanCalendarManager {
     ) {
 
         context.getSharedPreferences(
-                PREFS,
-                Context.MODE_PRIVATE
-        ).edit()
+                        PREFS,
+                        Context.MODE_PRIVATE
+                ).edit()
                 .putLong("loanCalendarEventId", eventId)
                 .putLong("loanCalendarId", calendarId)
                 .apply();
@@ -675,9 +649,7 @@ public final class LoanCalendarManager {
     public static void removeLoanEvent(Context context) {
 
         if (!hasCalendarPermission(context)) {
-
             Log.w(TAG, "Cannot remove event without calendar permission.");
-
             return;
         }
 
@@ -693,15 +665,14 @@ public final class LoanCalendarManager {
             }
 
             context.getSharedPreferences(
-                    PREFS,
-                    Context.MODE_PRIVATE
-            ).edit()
+                            PREFS,
+                            Context.MODE_PRIVATE
+                    ).edit()
                     .remove("loanCalendarEventId")
                     .remove("loanCalendarId")
                     .apply();
 
         } catch (Exception e) {
-
             Log.e(TAG, "Could not remove loan calendar event.", e);
         }
     }
@@ -741,7 +712,6 @@ public final class LoanCalendarManager {
                     && position.getIndex() == value.trim().length()) {
 
                 Calendar calendar = Calendar.getInstance();
-
                 calendar.setTime(date);
 
                 return calendar;

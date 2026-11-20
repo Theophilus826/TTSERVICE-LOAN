@@ -1081,7 +1081,7 @@ export default function Dashboard() {
           />
         )}
 
-        <section className="mb-6">
+        {/* <section className="mb-6">
           <button
             type="button"
             onClick={() => navigate("/test")}
@@ -1091,7 +1091,7 @@ export default function Dashboard() {
             Test Floating Reminder
             <ArrowRight size={17} />
           </button>
-        </section>
+        </section> */}
       </main>
     </div>
   );

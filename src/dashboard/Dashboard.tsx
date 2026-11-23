@@ -508,10 +508,9 @@ export default function Dashboard() {
   );
 
   const loanCompleted =
-    !hasCurrentApplication &&
-    (completedLoanFromStatus ||
-      completedLoanFromLoans ||
-      completedLoanFromDashboard);
+  completedLoanFromStatus ||
+  completedLoanFromLoans ||
+  completedLoanFromDashboard;
 
   const canApplyForNewLoan =
     status?.canApplyForNewLoan === true ||

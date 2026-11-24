@@ -112,13 +112,39 @@ function isOneOf(
 }
 
 function isCompletedLoan(loan?: CustomerLoan | null): boolean {
-  return isOneOf(loan?.status, [
+  if (!loan) return false;
+
+  const completedStatus = isOneOf(loan.status, [
     "completed",
     "fully_repaid",
     "repaid",
     "closed",
     "settled",
   ]);
+
+  if (completedStatus) return true;
+
+  // Some API responses leave the loan status as "active" after the final
+  // payment. Treat it as settled when the repayment figures confirm that the
+  // full amount has been paid and there is no outstanding balance.
+  const schedule = getRepaymentSchedule(loan);
+  const totalRepayment = Number(
+    loan.totalRepayment ?? schedule?.totalRepaymentAmount ?? 0,
+  );
+  const amountPaid = Number(loan.amountPaid ?? schedule?.amountPaid ?? 0);
+  const outstandingValue =
+    loan.outstandingAmount ?? schedule?.amountOutstanding;
+  const outstanding =
+    outstandingValue == null ? null : Number(outstandingValue);
+
+  return (
+    Number.isFinite(totalRepayment) &&
+    totalRepayment > 0 &&
+    Number.isFinite(amountPaid) &&
+    amountPaid >= totalRepayment - 0.01 &&
+    (outstanding === null ||
+      (Number.isFinite(outstanding) && outstanding <= 0.01))
+  );
 }
 
 function isCompletedRepayment(value?: string | null): boolean {
@@ -155,7 +181,7 @@ function preserveCompletedRepaymentStatus(
     (incomingScheduleId &&
       incomingScheduleId !== previousScheduleId) ||
     !isCompletedRepayment(previous?.repayment?.status) ||
-    incoming.repayment?.status
+    isCompletedRepayment(incoming.repayment?.status)
   ) {
     return incoming;
   }
@@ -581,21 +607,27 @@ export default function Dashboard() {
     dashboardActiveLoan && isCompletedLoan(dashboardActiveLoan),
   );
 
-  const hasCurrentApplication = Boolean(
-    (status?.loan?.applicationId &&
-      !isTerminalApplication(status?.loan?.applicationStatus)) ||
-    (profileApplication && !isTerminalApplication(profileApplication.status)),
+  // The onboarding repayment status describes the repayment schedule, while
+  // repayment-history records describe individual transactions. Only use the
+  // onboarding status here; a single successful history item is not enough to
+  // mark the entire loan as repaid.
+  const completedRepaymentFromStatus = isCompletedRepayment(
+    status?.repayment?.status,
   );
 
+  const completedLoanEvidence =
+    completedLoanFromStatus ||
+    completedLoanFromLoans ||
+    completedLoanFromDashboard ||
+    completedRepaymentFromStatus;
+
+  // Ignore a stale REPAYMENT nextStep once the repayment schedule is complete.
   const hasOngoingRepayment =
-    hasActiveLoan || status?.nextStep === "REPAYMENT";
+    hasActiveLoan ||
+    (status?.nextStep === "REPAYMENT" && !completedRepaymentFromStatus);
 
   const loanCompleted =
-    !hasCurrentApplication &&
-    !hasOngoingRepayment &&
-    (completedLoanFromStatus ||
-      completedLoanFromLoans ||
-      completedLoanFromDashboard);
+    !hasOngoingRepayment && completedLoanEvidence;
 
   const canApplyForNewLoan =
     status?.canApplyForNewLoan === true ||

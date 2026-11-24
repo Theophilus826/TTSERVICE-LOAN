@@ -1,6 +1,7 @@
 
 package com.menumoney;
 
+import android.app.AlarmManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -28,9 +29,6 @@ public class LoanWidgetPlugin extends Plugin {
 
     private static final String CONSENT_PREFS =
             "menumoney_floating_consent";
-
-    private static final long REMINDER_COOLDOWN_MS =
-            24L * 60L * 60L * 1000L;
 
     // =========================================================
     // UPDATE LOAN AND FLOATING REMINDER DATA
@@ -112,9 +110,10 @@ public class LoanWidgetPlugin extends Plugin {
             }
         }
 
-        boolean paymentDue = !currentIds.isEmpty();
+        boolean paymentDue = requestedPaymentDue
+                || !currentIds.isEmpty();
 
-        if (requestedPaymentDue != paymentDue) {
+        if (!requestedPaymentDue && !currentIds.isEmpty()) {
             Log.w(
                     TAG,
                     "Payment due flag did not match unpaid installment IDs."
@@ -130,15 +129,28 @@ public class LoanWidgetPlugin extends Plugin {
                 ""
         );
 
-        Set<String> previousIds = new HashSet<>(
-                prefs.getStringSet(
-                        "unpaidInstallmentIds",
-                        new HashSet<>()
-                )
-        );
-
         long nextReminderAt = prefs.getLong(
                 "nextReminderAt",
+                0L
+        );
+
+        String nextInstallmentId = call.getString(
+                "nextInstallmentId",
+                ""
+        );
+
+        long nextInstallmentDueAt = call.getLong(
+                "nextInstallmentDueAt",
+                0L
+        );
+
+        String previousReminderInstallmentId = prefs.getString(
+                "nextReminderInstallmentId",
+                ""
+        );
+
+        long previousInstallmentDueAt = prefs.getLong(
+                "nextInstallmentDueAt",
                 0L
         );
 
@@ -160,14 +172,13 @@ public class LoanWidgetPlugin extends Plugin {
                     "Account changed. Resetting previous payment tracking."
             );
 
-            previousIds.clear();
             nextReminderAt = 0L;
             reminderSnoozeUntil = 0L;
         }
 
-        boolean paymentWasMade =
-                !previousIds.isEmpty()
-                        && !currentIds.containsAll(previousIds);
+        boolean reminderAnchorChanged =
+                !nextInstallmentId.equals(previousReminderInstallmentId)
+                        || nextInstallmentDueAt != previousInstallmentDueAt;
 
         boolean reminderCurrentlyShown = prefs.getBoolean(
                 "reminderCurrentlyShown",
@@ -181,16 +192,19 @@ public class LoanWidgetPlugin extends Plugin {
         } else if (accountChanged
                 || !previouslyDue
                 || nextReminderAt <= 0L
-                || paymentWasMade) {
+                || reminderAnchorChanged) {
 
-            nextReminderAt =
-                    System.currentTimeMillis() + REMINDER_COOLDOWN_MS;
+            nextReminderAt = nextInstallmentDueAt > 0L
+                    ? nextInstallmentDueAt
+                    : System.currentTimeMillis();
             reminderSnoozeUntil = 0L;
             reminderCurrentlyShown = false;
 
-            Log.d(TAG, paymentWasMade
-                    ? "Payment detected. Reminder reset for 24 hours."
-                    : "New unpaid installment detected. Reminder set for 24 hours.");
+            Log.d(
+                    TAG,
+                    "Reminder scheduled for installment due time: "
+                            + nextReminderAt
+            );
         }
 
         // -----------------------------------------------------
@@ -219,6 +233,16 @@ public class LoanWidgetPlugin extends Plugin {
         editor.putLong(
                 "nextReminderAt",
                 nextReminderAt
+        );
+
+        editor.putString(
+                "nextReminderInstallmentId",
+                paymentDue ? nextInstallmentId : ""
+        );
+
+        editor.putLong(
+                "nextInstallmentDueAt",
+                paymentDue ? nextInstallmentDueAt : 0L
         );
 
         editor.putLong(
@@ -494,6 +518,8 @@ public class LoanWidgetPlugin extends Plugin {
         editor.remove("reminderSnoozeUntil");
         editor.remove("nextReminderAt");
         editor.remove("reminderCurrentlyShown");
+        editor.remove("nextReminderInstallmentId");
+        editor.remove("nextInstallmentDueAt");
         editor.remove("lastLoanTransactionAt");
         editor.remove("lastReminderTransactionId");
 
@@ -883,10 +909,38 @@ public class LoanWidgetPlugin extends Plugin {
         boolean overlayGranted =
                 Settings.canDrawOverlays(context);
 
+        AlarmManager alarmManager =
+                (AlarmManager) context.getSystemService(
+                        Context.ALARM_SERVICE
+                );
+
+        boolean exactAlarmGranted =
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                        || (alarmManager != null
+                        && alarmManager.canScheduleExactAlarms());
+
         long snoozeUntil = prefs.getLong(
                 "reminderSnoozeUntil",
                 0L
         );
+
+        long nextReminderAt = prefs.getLong(
+                "nextReminderAt",
+                0L
+        );
+
+        long nextInstallmentDueAt = prefs.getLong(
+                "nextInstallmentDueAt",
+                0L
+        );
+
+        boolean reminderCurrentlyShown = prefs.getBoolean(
+                "reminderCurrentlyShown",
+                false
+        );
+
+        boolean scheduleDue = nextReminderAt > 0L
+                && System.currentTimeMillis() >= nextReminderAt;
 
         boolean cooldownFinished =
                 System.currentTimeMillis() >= snoozeUntil;
@@ -905,9 +959,18 @@ public class LoanWidgetPlugin extends Plugin {
                 .put("paymentDue", paymentDue)
                 .put("hasData", hasData)
                 .put("overlayGranted", overlayGranted)
+                .put("exactAlarmGranted", exactAlarmGranted)
                 .put("cooldownFinished", cooldownFinished)
                 .put("allowed", allowed)
                 .put("snoozeUntil", snoozeUntil)
+                .put("nextReminderAt", nextReminderAt)
+                .put("nextInstallmentDueAt", nextInstallmentDueAt)
+                .put("scheduleDue", scheduleDue)
+                .put("reminderCurrentlyShown", reminderCurrentlyShown)
+                .put(
+                        "nextReminderInstallmentId",
+                        prefs.getString("nextReminderInstallmentId", "")
+                )
                 .put(
                         "reminderWidth",
                         prefs.getInt("reminderWidth", 320)

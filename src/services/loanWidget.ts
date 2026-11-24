@@ -40,6 +40,8 @@ interface LoanWidgetPlugin {
     paymentDue: boolean;
     floatingReminderEnabled: boolean;
     unpaidInstallmentIds: string[];
+    nextInstallmentId: string;
+    nextInstallmentDueAt: number;
 
     reminderWidth: number;
     reminderBackgroundHex: string;
@@ -106,23 +108,48 @@ const formatMoney = (
 const getInstallmentAmount = (
   installment: RepaymentInstallment,
 ): number => {
-  if (typeof installment.remainingAmount === "number") {
-    return installment.remainingAmount;
-  }
-
   const total =
     installment.totalAmount ??
     installment.total ??
     installment.amount;
 
-  const paid =
-    installment.paidAmount ??
-    installment.paid ??
-    0;
+  const paid = installment.paidAmount ?? installment.paid;
 
-  if (typeof total !== "number") return 0;
+  if (
+    typeof total === "number" &&
+    Number.isFinite(total) &&
+    typeof paid === "number" &&
+    Number.isFinite(paid)
+  ) {
+    return Math.max(0, total - paid);
+  }
 
-  return Math.max(0, total - paid);
+  const remaining = installment.remainingAmount;
+
+  if (typeof remaining === "number" && Number.isFinite(remaining)) {
+    return Math.max(0, remaining);
+  }
+
+  return typeof total === "number" && Number.isFinite(total)
+    ? Math.max(0, total)
+    : 0;
+};
+
+const getInstallmentId = (
+  installment: RepaymentInstallment,
+): string => {
+  const item = installment as RepaymentInstallment & {
+    _id?: string;
+    id?: string;
+    installmentId?: string;
+  };
+
+  return String(
+    item._id ??
+    item.id ??
+    item.installmentId ??
+    ""
+  );
 };
 
 const getInstallmentDate = (
@@ -138,7 +165,9 @@ const getUnpaidInstallmentIds = (
   schedules: RepaymentSchedule[],
 ): string[] => {
   const ids = schedules.flatMap((schedule) =>
-    (schedule.installments ?? [])
+    (schedule.status === "paid" || schedule.status === "cancelled"
+      ? []
+      : schedule.installments ?? [])
       .filter((installment) => {
         const status = String(
           installment.status ?? ""
@@ -150,20 +179,7 @@ const getUnpaidInstallmentIds = (
           getInstallmentAmount(installment) > 0
         );
       })
-      .map((installment) => {
-        const item = installment as RepaymentInstallment & {
-          _id?: string;
-          id?: string;
-          installmentId?: string;
-        };
-
-        return String(
-          item._id ??
-          item.id ??
-          item.installmentId ??
-          ""
-        );
-      })
+      .map(getInstallmentId)
       .filter(Boolean)
   );
 
@@ -174,12 +190,15 @@ const getNextInstallment = (
   schedules: RepaymentSchedule[],
 ) => {
   const candidates = schedules.flatMap((schedule) =>
-    (schedule.installments ?? []).map((installment) => ({
-      schedule,
-      installment,
-      amount: getInstallmentAmount(installment),
-      date: getInstallmentDate(installment, schedule),
-    }))
+    (schedule.status === "paid" || schedule.status === "cancelled"
+      ? []
+      : schedule.installments ?? []).map((installment) => ({
+        schedule,
+        installment,
+        amount: getInstallmentAmount(installment),
+        date: getInstallmentDate(installment, schedule),
+        id: getInstallmentId(installment),
+      }))
   );
 
   return candidates
@@ -195,12 +214,13 @@ const getNextInstallment = (
       );
     })
     .sort((a, b) => {
-      const aTime = a.date
-        ? new Date(a.date).getTime()
+      const aParsed = a.date ? new Date(a.date).getTime() : NaN;
+      const bParsed = b.date ? new Date(b.date).getTime() : NaN;
+      const aTime = Number.isFinite(aParsed)
+        ? aParsed
         : Number.MAX_SAFE_INTEGER;
-
-      const bTime = b.date
-        ? new Date(b.date).getTime()
+      const bTime = Number.isFinite(bParsed)
+        ? bParsed
         : Number.MAX_SAFE_INTEGER;
 
       return aTime - bTime;
@@ -423,6 +443,7 @@ export async function syncLoanWidget(): Promise<void> {
 
     let amount = "No payment due";
     let dueDate = "—";
+    let nextInstallmentDueAt = 0;
 
     if (next) {
       amount = formatMoney(
@@ -434,6 +455,7 @@ export async function syncLoanWidget(): Promise<void> {
         const parsedDate = new Date(next.date);
 
         if (!Number.isNaN(parsedDate.getTime())) {
+          nextInstallmentDueAt = parsedDate.getTime();
           dueDate = new Intl.DateTimeFormat("en-NG", {
             day: "numeric",
             month: "short",
@@ -454,12 +476,14 @@ export async function syncLoanWidget(): Promise<void> {
         adminMessage?.trim() ||
         "Check your next loan installment and repayment details.",
 
-      paymentDue: unpaidInstallmentIds.length > 0,
+      paymentDue: Boolean(next),
 
       floatingReminderEnabled:
         adminFloatingReminderEnabled,
 
       unpaidInstallmentIds,
+      nextInstallmentId: next?.id ?? "",
+      nextInstallmentDueAt,
 
       // Global admin-configured appearance.
       reminderWidth: appearance.reminderWidth,

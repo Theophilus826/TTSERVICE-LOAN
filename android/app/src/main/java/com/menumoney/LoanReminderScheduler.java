@@ -241,7 +241,20 @@ public final class LoanReminderScheduler {
         try {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-                    && alarmManager.canScheduleExactAlarms()) {
+                    && !alarmManager.canScheduleExactAlarms()) {
+
+                Log.w(
+                        TAG,
+                        "Exact alarm access is unavailable; Android may delay the reminder."
+                );
+
+                alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                );
+
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 
                 alarmManager.setExactAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
@@ -251,7 +264,7 @@ public final class LoanReminderScheduler {
 
             } else {
 
-                alarmManager.setAndAllowWhileIdle(
+                alarmManager.setExact(
                         AlarmManager.RTC_WAKEUP,
                         triggerAt,
                         pendingIntent
@@ -264,11 +277,19 @@ public final class LoanReminderScheduler {
 
             Log.e(TAG, "Alarm permission unavailable.", e);
 
-            alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-            );
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                );
+            } else {
+                alarmManager.set(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                );
+            }
         }
     }
 

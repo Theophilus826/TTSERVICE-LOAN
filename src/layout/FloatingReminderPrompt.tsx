@@ -163,7 +163,7 @@ export default function FloatingReminderPrompt() {
               await syncLoanWidget();
 
               setMessage(
-                "Permission granted. Floating reminders can appear when a payment is due."
+                ""
               );
             } else {
               setMessage(

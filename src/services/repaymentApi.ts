@@ -157,6 +157,13 @@ export type Repayment = {
   failedAt?: string | null;
 };
 
+export type RepaymentHistoryRecord = Pick<
+  Repayment,
+  "_id" | "status" | "createdAt" | "updatedAt"
+> & {
+  repaymentSchedule?: string | { _id?: string } | null;
+};
+
 /* =========================================================
    REPAYMENT RESPONSE
 ========================================================= */
@@ -540,6 +547,22 @@ const getRepayments = async ({
   return response.data;
 };
 
+const getRepaymentHistory = async (): Promise<RepaymentHistoryRecord[]> => {
+  const response = await API.get<{
+    success: boolean;
+    data?: RepaymentHistoryRecord[];
+    message?: string;
+  }>(`${REPAYMENT_URL}/history`);
+
+  if (!response.data?.success || !Array.isArray(response.data.data)) {
+    throw new Error(
+      response.data?.message || "Unable to load repayment history.",
+    );
+  }
+
+  return response.data.data;
+};
+
 /* =========================================================
    GET SINGLE REPAYMENT
 ========================================================= */
@@ -650,6 +673,7 @@ const repaymentApi = {
   initiateRepayment,
   repayFromAccount,
   getRepayments,
+  getRepaymentHistory,
   getRepayment,
 
   /* DVA / repayment account */

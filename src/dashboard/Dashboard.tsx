@@ -28,6 +28,9 @@ import myLoanApi, {
   type LoanDashboard,
   getRepaymentSchedule,
 } from "../services/myLoanApi";
+import repaymentApi, {
+  type RepaymentHistoryRecord,
+} from "../services/repaymentApi";
 import API from "../services/Api";
 import Header from "../component/Header";
 
@@ -119,7 +122,23 @@ function isCompletedLoan(loan?: CustomerLoan | null): boolean {
 }
 
 function isCompletedRepayment(value?: string | null): boolean {
-  return isOneOf(value, ["completed", "paid", "fully_repaid", "repaid"]);
+  return isOneOf(value, [
+    "completed",
+    "paid",
+    "fully_repaid",
+    "repaid",
+    "successful",
+  ]);
+}
+
+function getHistoryScheduleId(
+  repayment?: RepaymentHistoryRecord | null,
+): string | null {
+  const schedule = repayment?.repaymentSchedule;
+
+  if (typeof schedule === "string") return schedule;
+
+  return schedule?._id ?? null;
 }
 
 function preserveCompletedRepaymentStatus(
@@ -266,6 +285,8 @@ export default function Dashboard() {
   const { user } = useAuth();
 
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
+  const [latestRepayment, setLatestRepayment] =
+    useState<RepaymentHistoryRecord | null>(null);
   const [loanDashboard, setLoanDashboard] = useState<LoanDashboard | null>(
     null,
   );
@@ -306,11 +327,17 @@ export default function Dashboard() {
       while (shouldRefreshAgain && mountedRef.current) {
         refreshQueued.current = false;
 
-        const [onboardingResult, loanResult, profileResult] =
+        const [
+          onboardingResult,
+          loanResult,
+          profileResult,
+          repaymentHistoryResult,
+        ] =
           await Promise.allSettled([
             onboardingApi.getStatus(),
             myLoanApi.getLoanDashboard(),
             API.get<DashboardProfileResponse>("/users/me/profile"),
+            repaymentApi.getRepaymentHistory(),
           ]);
 
         if (!mountedRef.current) return;
@@ -353,6 +380,20 @@ export default function Dashboard() {
           }
         } else {
           console.error("Failed to load user profile:", profileResult.reason);
+        }
+
+        if (repaymentHistoryResult.status === "fulfilled") {
+          const mostRecentRepayment = repaymentHistoryResult.value[0];
+
+          if (mostRecentRepayment) {
+            setLatestRepayment(mostRecentRepayment);
+          }
+          successfulRequests++;
+        } else {
+          console.error(
+            "Failed to load repayment history:",
+            repaymentHistoryResult.reason,
+          );
         }
 
         if (successfulRequests === 0) {
@@ -593,9 +634,15 @@ export default function Dashboard() {
       MANDATE_STATUSES.includes(profileOfferStatus) ||
       MANDATE_STATUSES.includes(mandateStatus));
 
-  const repaymentStatus = status?.repayment?.status ?? null;
-
   const repaymentScheduleId = status?.repayment?.repaymentScheduleId ?? null;
+
+  const latestRepaymentBelongsToSchedule =
+    Boolean(repaymentScheduleId) &&
+    getHistoryScheduleId(latestRepayment) === repaymentScheduleId;
+
+  const repaymentStatus = latestRepaymentBelongsToSchedule
+    ? latestRepayment?.status ?? null
+    : status?.repayment?.status ?? null;
 
   const repaymentActive =
     !loanCompleted &&

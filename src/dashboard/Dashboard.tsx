@@ -582,16 +582,20 @@ export default function Dashboard() {
   );
 
   const hasCurrentApplication = Boolean(
-    (status?.loan?.exists &&
-      !isTerminalApplication(effectiveApplicationStatus)) ||
+    (status?.loan?.applicationId &&
+      !isTerminalApplication(status?.loan?.applicationStatus)) ||
     (profileApplication && !isTerminalApplication(profileApplication.status)),
   );
 
+  const hasOngoingRepayment =
+    hasActiveLoan || status?.nextStep === "REPAYMENT";
+
   const loanCompleted =
-  !hasCurrentApplication &&
-  (completedLoanFromStatus ||
-    completedLoanFromLoans ||
-    completedLoanFromDashboard);
+    !hasCurrentApplication &&
+    !hasOngoingRepayment &&
+    (completedLoanFromStatus ||
+      completedLoanFromLoans ||
+      completedLoanFromDashboard);
 
   const canApplyForNewLoan =
     status?.canApplyForNewLoan === true ||

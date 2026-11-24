@@ -118,6 +118,40 @@ function isCompletedLoan(loan?: CustomerLoan | null): boolean {
   ]);
 }
 
+function isCompletedRepayment(value?: string | null): boolean {
+  return isOneOf(value, ["completed", "paid", "fully_repaid", "repaid"]);
+}
+
+function preserveCompletedRepaymentStatus(
+  previous: OnboardingStatus | null,
+  incoming: OnboardingStatus,
+): OnboardingStatus {
+  const previousScheduleId =
+    previous?.repayment?.repaymentScheduleId;
+  const incomingScheduleId =
+    incoming.repayment?.repaymentScheduleId;
+
+  if (
+    !previousScheduleId ||
+    (incomingScheduleId &&
+      incomingScheduleId !== previousScheduleId) ||
+    !isCompletedRepayment(previous?.repayment?.status) ||
+    incoming.repayment?.status
+  ) {
+    return incoming;
+  }
+
+  return {
+    ...incoming,
+    repayment: {
+      ...incoming.repayment,
+      exists: true,
+      repaymentScheduleId: previousScheduleId,
+      status: previous.repayment?.status ?? null,
+    },
+  };
+}
+
 function isKycStatusComplete(value?: string | null): boolean {
   return isOneOf(value, ["completed", "complete", "approved", "verified"]);
 }
@@ -284,7 +318,12 @@ export default function Dashboard() {
         let successfulRequests = 0;
 
         if (onboardingResult.status === "fulfilled") {
-          setStatus(onboardingResult.value);
+          setStatus((previous) =>
+            preserveCompletedRepaymentStatus(
+              previous,
+              onboardingResult.value,
+            ),
+          );
           successfulRequests++;
         } else {
           console.error(
@@ -567,11 +606,13 @@ export default function Dashboard() {
   const displayedApplicationStatus =
     effectiveApplicationStatus || normalizeStatus(status?.currentStatus) || "";
 
-  const repaymentStatusLabel = repaymentStatus
-    ? formatStatus(repaymentStatus)
-    : hasActiveLoan
-      ? formatStatus(activeLoan?.status)
-      : "Not started";
+  const repaymentStatusLabel = isCompletedRepayment(repaymentStatus)
+    ? "Completed"
+    : repaymentStatus
+      ? formatStatus(repaymentStatus)
+      : hasActiveLoan
+        ? formatStatus(activeLoan?.status)
+        : "Not started";
 
   // =========================================================
   // SUMMARY
@@ -1008,12 +1049,8 @@ export default function Dashboard() {
                 complete={loanCompleted || repaymentActive}
                 status={
                   loanCompleted
-                    ? "Fully repaid"
-                    : repaymentStatus
-                      ? formatStatus(repaymentStatus)
-                      : repaymentActive
-                        ? "Active"
-                        : "Not started"
+                    ? "Completed"
+                    : repaymentStatusLabel
                 }
                 completed={loanCompleted}
                 action={

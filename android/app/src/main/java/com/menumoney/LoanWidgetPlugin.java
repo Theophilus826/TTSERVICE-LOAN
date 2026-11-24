@@ -82,7 +82,7 @@ public class LoanWidgetPlugin extends Plugin {
                 "Check your next loan installment and repayment details."
         );
 
-        boolean paymentDue = Boolean.TRUE.equals(
+        boolean requestedPaymentDue = Boolean.TRUE.equals(
                 call.getBoolean("paymentDue", false)
         );
 
@@ -112,6 +112,15 @@ public class LoanWidgetPlugin extends Plugin {
             }
         }
 
+        boolean paymentDue = !currentIds.isEmpty();
+
+        if (requestedPaymentDue != paymentDue) {
+            Log.w(
+                    TAG,
+                    "Payment due flag did not match unpaid installment IDs."
+            );
+        }
+
         // -----------------------------------------------------
         // PREVIOUS PAYMENT TRACKING
         // -----------------------------------------------------
@@ -128,12 +137,23 @@ public class LoanWidgetPlugin extends Plugin {
                 )
         );
 
+        long nextReminderAt = prefs.getLong(
+                "nextReminderAt",
+                0L
+        );
+
         long reminderSnoozeUntil = prefs.getLong(
                 "reminderSnoozeUntil",
                 0L
         );
 
-        if (!userId.equals(previousUserId)) {
+        boolean accountChanged = !userId.equals(previousUserId);
+        boolean previouslyDue = prefs.getBoolean(
+                "paymentDue",
+                false
+        );
+
+        if (accountChanged) {
 
             Log.d(
                     TAG,
@@ -141,6 +161,7 @@ public class LoanWidgetPlugin extends Plugin {
             );
 
             previousIds.clear();
+            nextReminderAt = 0L;
             reminderSnoozeUntil = 0L;
         }
 
@@ -148,15 +169,28 @@ public class LoanWidgetPlugin extends Plugin {
                 !previousIds.isEmpty()
                         && !currentIds.containsAll(previousIds);
 
-        if (paymentWasMade) {
+        boolean reminderCurrentlyShown = prefs.getBoolean(
+                "reminderCurrentlyShown",
+                false
+        );
 
-            reminderSnoozeUntil =
+        if (!paymentDue) {
+            nextReminderAt = 0L;
+            reminderSnoozeUntil = 0L;
+            reminderCurrentlyShown = false;
+        } else if (accountChanged
+                || !previouslyDue
+                || nextReminderAt <= 0L
+                || paymentWasMade) {
+
+            nextReminderAt =
                     System.currentTimeMillis() + REMINDER_COOLDOWN_MS;
+            reminderSnoozeUntil = 0L;
+            reminderCurrentlyShown = false;
 
-            Log.d(
-                    TAG,
-                    "Payment detected. Reminder paused for 24 hours."
-            );
+            Log.d(TAG, paymentWasMade
+                    ? "Payment detected. Reminder reset for 24 hours."
+                    : "New unpaid installment detected. Reminder set for 24 hours.");
         }
 
         // -----------------------------------------------------
@@ -183,8 +217,18 @@ public class LoanWidgetPlugin extends Plugin {
         );
 
         editor.putLong(
+                "nextReminderAt",
+                nextReminderAt
+        );
+
+        editor.putLong(
                 "reminderSnoozeUntil",
                 reminderSnoozeUntil
+        );
+
+        editor.putBoolean(
+                "reminderCurrentlyShown",
+                reminderCurrentlyShown
         );
 
         // -----------------------------------------------------
@@ -448,6 +492,10 @@ public class LoanWidgetPlugin extends Plugin {
 
         editor.remove("unpaidInstallmentIds");
         editor.remove("reminderSnoozeUntil");
+        editor.remove("nextReminderAt");
+        editor.remove("reminderCurrentlyShown");
+        editor.remove("lastLoanTransactionAt");
+        editor.remove("lastReminderTransactionId");
 
         boolean cleared = editor.commit();
 
@@ -984,10 +1032,7 @@ public class LoanWidgetPlugin extends Plugin {
             if (!cooldownFinished && adminEnabled && consent
                     && paymentDue && hasData && overlayGranted) {
 
-                FloatingReminderService.scheduleReminderRecheck(
-                        context,
-                        snoozeUntil
-                );
+                LoanReminderScheduler.scheduleNextWake(context);
             } else {
 
                 FloatingReminderService.cancelReminderRecheck(

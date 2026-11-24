@@ -19,7 +19,10 @@ public class BootCompletedReceiver extends BroadcastReceiver {
 
         String action = intent.getAction();
 
-        // Only handle boot completion and application updates.
+        // ---------------------------------------------
+        // ACCEPT ONLY BOOT AND APP UPDATE EVENTS
+        // ---------------------------------------------
+
         if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
                 && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
 
@@ -27,13 +30,16 @@ public class BootCompletedReceiver extends BroadcastReceiver {
             return;
         }
 
-        Log.d(TAG, "Boot completed or MenuMoney updated.");
+        Log.d(TAG, "Device boot completed or MenuMoney updated.");
 
         final Context appContext = context.getApplicationContext();
 
-        // =============================================
+        // Keep the receiver alive while calendar sync runs.
+        final PendingResult pendingResult = goAsync();
+
+        // ---------------------------------------------
         // 1. RESTORE FLOATING LOAN REMINDERS
-        // =============================================
+        // ---------------------------------------------
 
         try {
 
@@ -48,18 +54,23 @@ public class BootCompletedReceiver extends BroadcastReceiver {
 
             appContext.sendBroadcast(restoreIntent);
 
-            Log.d(TAG, "Floating reminder restoration requested.");
+            Log.d(
+                    TAG,
+                    "Floating reminder restoration broadcast sent."
+            );
 
         } catch (Exception e) {
 
-            Log.e(TAG, "Floating reminder restoration failed.", e);
+            Log.e(
+                    TAG,
+                    "Floating reminder restoration failed.",
+                    e
+            );
         }
 
-        // =============================================
-        // 2. RESTORE LOAN CALENDAR EVENT
-        // =============================================
-
-        final PendingResult pendingResult = goAsync();
+        // ---------------------------------------------
+        // 2. RESTORE LOAN CALENDAR EVENTS
+        // ---------------------------------------------
 
         new Thread(() -> {
 
@@ -69,20 +80,27 @@ public class BootCompletedReceiver extends BroadcastReceiver {
 
                     LoanCalendarManager.syncFromPreferences(appContext);
 
-                    Log.d(TAG, "Loan calendar synchronization completed.");
+                    Log.d(
+                            TAG,
+                            "Loan calendar synchronization completed."
+                    );
 
                 } else {
 
                     Log.w(
                             TAG,
-                            "Calendar permissions unavailable. " +
-                                    "Synchronization will wait until permission is granted."
+                            "Calendar permission unavailable. " +
+                                    "Synchronization postponed."
                     );
                 }
 
             } catch (Exception e) {
 
-                Log.e(TAG, "Loan calendar restoration failed.", e);
+                Log.e(
+                        TAG,
+                        "Loan calendar restoration failed.",
+                        e
+                );
 
             } finally {
 

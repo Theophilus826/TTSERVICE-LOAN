@@ -1,141 +1,77 @@
 
 package com.menumoney;
 
-import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
-
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
-
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
-
+import android.os.Looper;
 import android.provider.Settings;
-
 import android.util.Log;
 import android.util.TypedValue;
-
 import android.view.Gravity;
 import android.view.WindowManager;
-
 import android.widget.TextView;
 import android.widget.Button;
 import android.widget.LinearLayout;
 
 public class FloatingReminderService extends Service {
 
-    private static final String TAG = "FloatingReminderService";
+    private static final String TAG =
+            "FloatingReminderService";
 
-    private static final String PREFS = "menumoney_loan_widget";
-    private static final String CONSENT_PREFS = "menumoney_floating_consent";
+    private static final String PREFS =
+            "menumoney_loan_widget";
 
-    private static final String CHANNEL_ID = "loan_floating_reminder";
+    private static final String CONSENT_PREFS =
+            "menumoney_floating_consent";
+
+    private static final String CHANNEL_ID =
+            "loan_floating_reminder";
 
     private static final int NOTIFICATION_ID = 7314;
-    private static final int ALARM_REQUEST_CODE = 7315;
-
-    private static final String RECHECK_ACTION =
-            "com.menumoney.RECHECK_FLOATING_REMINDER";
 
     private static final String ACTION_REFRESH_APPEARANCE =
             "com.menumoney.REFRESH_FLOATING_APPEARANCE";
 
     private WindowManager windowManager;
-    private TextView floatingView;
+
     private LinearLayout floatingContainer;
 
-    // =========================================================
-    // ALARM MANAGEMENT
-    // =========================================================
+    private TextView floatingView;
 
-    public static void scheduleReminderRecheck(
-            Context context,
-            long triggerAtMillis
+    private TextView countdownView;
+
+    private final Handler countdownHandler =
+            new Handler(Looper.getMainLooper());
+
+    private Runnable countdownRunnable;
+
+    // =====================================================
+    // ALARM MANAGEMENT
+    // =====================================================
+
+    public static void cancelReminderRecheck(
+            Context context
     ) {
 
-        AlarmManager alarmManager =
-                (AlarmManager) context.getSystemService(
-                        Context.ALARM_SERVICE
-                );
-
-        if (alarmManager == null) {
-            Log.e(TAG, "AlarmManager is unavailable.");
-            return;
-        }
-
-        Intent intent = new Intent(
-                context,
-                FloatingReminderReceiver.class
-        );
-
-        intent.setAction(RECHECK_ACTION);
-
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(
-                context,
-                ALARM_REQUEST_CODE,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT |
-                        PendingIntent.FLAG_IMMUTABLE
-        );
-
-        if (triggerAtMillis <= System.currentTimeMillis()) {
-            triggerAtMillis = System.currentTimeMillis() + 1000L;
-        }
-
-        alarmManager.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent
-        );
-
-        Log.d(TAG, "Reminder recheck scheduled: " + triggerAtMillis);
+        LoanReminderScheduler.cancelAlarm(context);
     }
 
-    public static void cancelReminderRecheck(Context context) {
-
-        AlarmManager alarmManager =
-                (AlarmManager) context.getSystemService(
-                        Context.ALARM_SERVICE
-                );
-
-        if (alarmManager == null) {
-            return;
-        }
-
-        Intent intent = new Intent(
-                context,
-                FloatingReminderReceiver.class
-        );
-
-        intent.setAction(RECHECK_ACTION);
-
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(
-                context,
-                ALARM_REQUEST_CODE,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT |
-                        PendingIntent.FLAG_IMMUTABLE
-        );
-
-        alarmManager.cancel(pendingIntent);
-        pendingIntent.cancel();
-
-        Log.d(TAG, "Reminder recheck cancelled.");
-    }
-
-    // =========================================================
+    // =====================================================
     // REFRESH APPEARANCE
-    // =========================================================
+    // =====================================================
 
     public static void refreshAppearance(Context context) {
 
@@ -149,20 +85,27 @@ public class FloatingReminderService extends Service {
         try {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
                 context.startForegroundService(intent);
+
             } else {
+
                 context.startService(intent);
             }
 
         } catch (Exception e) {
 
-            Log.e(TAG, "Could not refresh floating reminder.", e);
+            Log.e(
+                    TAG,
+                    "Could not refresh floating reminder.",
+                    e
+            );
         }
     }
 
-    // =========================================================
+    // =====================================================
     // SERVICE LIFECYCLE
-    // =========================================================
+    // =====================================================
 
     @Override
     public void onCreate() {
@@ -176,6 +119,10 @@ public class FloatingReminderService extends Service {
 
         Log.d(TAG, "Floating reminder service created.");
     }
+
+    // =====================================================
+    // SERVICE START
+    // =====================================================
 
     @Override
     public int onStartCommand(
@@ -199,6 +146,10 @@ public class FloatingReminderService extends Service {
                 Context.MODE_PRIVATE
         );
 
+        // =================================================
+        // USER CONSENT
+        // =================================================
+
         String userId = prefs.getString(
                 "activeUserId",
                 ""
@@ -206,9 +157,13 @@ public class FloatingReminderService extends Service {
 
         boolean consent = !userId.isEmpty()
                 && consentPrefs.getBoolean(
-                "enabled_" + userId,
-                false
-        );
+                        "enabled_" + userId,
+                        false
+                );
+
+        // =================================================
+        // REMINDER SETTINGS
+        // =================================================
 
         boolean enabled = prefs.getBoolean(
                 "floatingReminderEnabled",
@@ -225,34 +180,24 @@ public class FloatingReminderService extends Service {
                 false
         );
 
-        long reminderSnoozeUntil = prefs.getLong(
-                "reminderSnoozeUntil",
-                0L
-        );
+        boolean overlayPermission =
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                        || Settings.canDrawOverlays(this);
 
-        // CHECK COOLDOWN
-
-        if (System.currentTimeMillis() < reminderSnoozeUntil) {
-
-            scheduleReminderRecheck(
-                    this,
-                    reminderSnoozeUntil
-            );
-
-            removeReminder();
-
-            stopSelf(startId);
-
-            return START_NOT_STICKY;
-        }
-
+        // =================================================
         // VALIDATE REMINDER REQUIREMENTS
+        // =================================================
 
         if (!enabled
                 || !consent
                 || !paymentDue
                 || !hasCustomerData
-                || !Settings.canDrawOverlays(this)) {
+                || !overlayPermission) {
+
+            Log.d(
+                    TAG,
+                    "Reminder requirements not satisfied."
+            );
 
             cancelReminderRecheck(this);
 
@@ -263,24 +208,166 @@ public class FloatingReminderService extends Service {
             return START_NOT_STICKY;
         }
 
-        // DISPLAY OR REFRESH REMINDER
+        // =================================================
+        // READ SAVED SCHEDULE
+        // =================================================
 
-        cancelReminderRecheck(this);
+        long now = System.currentTimeMillis();
+
+        long nextReminder = prefs.getLong(
+                "nextReminderAt",
+                0L
+        );
+
+        long snoozeUntil = prefs.getLong(
+                "reminderSnoozeUntil",
+                0L
+        );
+
+        boolean currentlyShown = prefs.getBoolean(
+                "reminderCurrentlyShown",
+                false
+        );
+
+        // =================================================
+        // REQUIRE A VALID TRANSACTION SCHEDULE
+        // =================================================
+
+        if (nextReminder <= 0L) {
+
+            Log.d(
+                    TAG,
+                    "No transaction reminder schedule exists."
+            );
+
+            removeReminder();
+
+            cancelReminderRecheck(this);
+
+            stopSelf(startId);
+
+            return START_NOT_STICKY;
+        }
+
+        // =================================================
+        // ACTIVE SNOOZE
+        // =================================================
+
+        if (snoozeUntil > now) {
+
+            Log.d(
+                    TAG,
+                    "Reminder snoozed until: " + snoozeUntil
+            );
+
+            removeReminder();
+
+            LoanReminderScheduler.scheduleNextWake(this);
+
+            stopSelf(startId);
+
+            return START_NOT_STICKY;
+        }
+
+        // =================================================
+        // SNOOZE EXPIRED
+        // =================================================
+
+        if (snoozeUntil > 0L && snoozeUntil <= now) {
+
+            Log.d(TAG, "Five-minute snooze expired.");
+
+            prefs.edit()
+
+                    .putLong(
+                            "reminderSnoozeUntil",
+                            0L
+                    )
+
+                    .putBoolean(
+                            "reminderCurrentlyShown",
+                            true
+                    )
+
+                    .apply();
+
+            currentlyShown = true;
+        }
+
+        // =================================================
+        // 24-HOUR REMINDER DEADLINE
+        // =================================================
+
+        if (now >= nextReminder) {
+
+            Log.d(TAG, "24-hour reminder deadline reached.");
+
+            long elapsedIntervals =
+                    (now - nextReminder)
+                            / LoanReminderScheduler.REMINDER_INTERVAL
+                            + 1L;
+            nextReminder += elapsedIntervals
+                    * LoanReminderScheduler.REMINDER_INTERVAL;
+
+            prefs.edit()
+
+                    .putLong(
+                            "nextReminderAt",
+                            nextReminder
+                    )
+
+                    .putBoolean(
+                            "reminderCurrentlyShown",
+                            true
+                    )
+
+                    .apply();
+
+            currentlyShown = true;
+        }
+
+        // =================================================
+        // BEFORE THE NEXT REMINDER
+        // =================================================
+
+        if (!currentlyShown) {
+
+            Log.d(
+                    TAG,
+                    "Next reminder has not reached its deadline."
+            );
+
+            removeReminder();
+
+            LoanReminderScheduler.scheduleNextWake(this);
+
+            stopSelf(startId);
+
+            return START_NOT_STICKY;
+        }
+
+        // =================================================
+        // SHOW REMINDER
+        // =================================================
+
+        LoanReminderScheduler.scheduleNextWake(this);
 
         showReminder(prefs);
 
         return START_NOT_STICKY;
     }
 
-    // =========================================================
+    // =====================================================
     // FLOATING REMINDER DISPLAY
-    // =========================================================
+    // =====================================================
 
     private void showReminder(SharedPreferences prefs) {
 
         removeReminder();
 
-        // CUSTOMER REPAYMENT INFORMATION
+        // =================================================
+        // CUSTOMER INFORMATION
+        // =================================================
 
         String amount = prefs.getString(
                 "amount",
@@ -307,7 +394,9 @@ public class FloatingReminderService extends Service {
                 ""
         );
 
-        // ACCOUNT NUMBER DISPLAY OPTION
+        // =================================================
+        // MASK ACCOUNT NUMBER
+        // =================================================
 
         boolean maskAccountNumber = prefs.getBoolean(
                 "maskReminderAccountNumber",
@@ -315,41 +404,54 @@ public class FloatingReminderService extends Service {
         );
 
         if (maskAccountNumber && !accountNumber.isEmpty()) {
+
             accountNumber = maskAccount(accountNumber);
         }
 
+        // =================================================
         // BUILD REMINDER CONTENT
+        // =================================================
 
         StringBuilder reminderContent = new StringBuilder();
 
-        reminderContent.append("LOAN PAYMENT REMINDER\n\n");
+        reminderContent.append(
+                "LOAN PAYMENT REMINDER\n\n"
+        );
 
         reminderContent.append("Amount Due: ")
                 .append(amount);
 
         if (!dueDate.isEmpty()) {
+
             reminderContent.append("\nDue Date: ")
                     .append(dueDate);
         }
 
         if (!bankName.isEmpty()) {
+
             reminderContent.append("\nBank: ")
                     .append(bankName);
         }
 
         if (!accountNumber.isEmpty()) {
+
             reminderContent.append("\nAccount Number: ")
                     .append(accountNumber);
         }
 
         if (!message.isEmpty()) {
+
             reminderContent.append("\n\n")
                     .append(message);
         }
 
-        reminderContent.append("\n\nOpen MenuMoney for details");
+        reminderContent.append(
+                "\n\nOpen MenuMoney for details"
+        );
 
-        // ADMIN-CONTROLLED APPEARANCE SETTINGS
+        // =================================================
+        // APPEARANCE SETTINGS
+        // =================================================
 
         int widthDp = prefs.getInt(
                 "reminderWidth",
@@ -381,7 +483,9 @@ public class FloatingReminderService extends Service {
                 14f
         );
 
+        // =================================================
         // BACKGROUND COLOUR
+        // =================================================
 
         String backgroundHex = prefs.getString(
                 "reminderBackgroundHex",
@@ -392,26 +496,39 @@ public class FloatingReminderService extends Service {
 
         try {
 
-            backgroundColor = Color.parseColor(backgroundHex);
+            backgroundColor = Color.parseColor(
+                    backgroundHex
+            );
 
         } catch (Exception e) {
 
             Log.e(
                     TAG,
-                    "Invalid reminder background colour: " + backgroundHex,
+                    "Invalid background colour.",
                     e
             );
 
-            backgroundColor = Color.rgb(23, 59, 104);
+            backgroundColor = Color.rgb(
+                    23,
+                    59,
+                    104
+            );
         }
 
+        // =================================================
         // TEXT COLOUR
+        // =================================================
 
         int textColor = getReminderTextColor(prefs);
 
-        // VALIDATE APPEARANCE VALUES
+        // =================================================
+        // VALIDATE APPEARANCE
+        // =================================================
 
-        widthDp = Math.max(200, Math.min(widthDp, 600));
+        widthDp = Math.max(
+                200,
+                Math.min(widthDp, 600)
+        );
 
         horizontalPaddingDp = Math.max(
                 0,
@@ -438,7 +555,9 @@ public class FloatingReminderService extends Service {
                 Math.min(textSize, 30f)
         );
 
-        // CONVERT DP TO PIXELS
+        // =================================================
+        // DP TO PIXELS
+        // =================================================
 
         int widthPx = dpToPx(widthDp);
 
@@ -454,9 +573,9 @@ public class FloatingReminderService extends Service {
                 cornerRadiusDp
         );
 
-        // =====================================================
-        // CREATE REMINDER CONTAINER
-        // =====================================================
+        // =================================================
+        // CREATE CONTAINER
+        // =================================================
 
         floatingContainer = new LinearLayout(this);
 
@@ -464,7 +583,9 @@ public class FloatingReminderService extends Service {
                 LinearLayout.VERTICAL
         );
 
-        // EXISTING REMINDER TEXT
+        // =================================================
+        // MAIN REMINDER TEXT
+        // =================================================
 
         floatingView = new TextView(this);
 
@@ -492,9 +613,12 @@ public class FloatingReminderService extends Service {
 
         floatingView.setMaxWidth(widthPx);
 
-        // ROUNDED BACKGROUND
+        // =================================================
+        // CONTAINER BACKGROUND
+        // =================================================
 
-        GradientDrawable background = new GradientDrawable();
+        GradientDrawable background =
+                new GradientDrawable();
 
         background.setColor(backgroundColor);
 
@@ -504,7 +628,9 @@ public class FloatingReminderService extends Service {
 
         floatingContainer.setBackground(background);
 
-        // ADD REMINDER TEXT TO CONTAINER
+        // =================================================
+        // ADD MAIN TEXT
+        // =================================================
 
         floatingContainer.addView(
                 floatingView,
@@ -514,9 +640,37 @@ public class FloatingReminderService extends Service {
                 )
         );
 
-        // =====================================================
-        // OPEN BUTTON AT BOTTOM
-        // =====================================================
+        // =================================================
+        // COUNTDOWN DISPLAY
+        // =================================================
+
+        countdownView = new TextView(this);
+
+        countdownView.setTextColor(textColor);
+
+        countdownView.setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                13f
+        );
+
+        countdownView.setPadding(
+                horizontalPaddingPx,
+                dpToPx(5),
+                horizontalPaddingPx,
+                dpToPx(12)
+        );
+
+        floatingContainer.addView(
+                countdownView,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        // =================================================
+        // OPEN BUTTON
+        // =================================================
 
         Button openButton = new Button(this);
 
@@ -524,19 +678,13 @@ public class FloatingReminderService extends Service {
 
         openButton.setAllCaps(true);
 
-        // WHITE BUTTON BACKGROUND
-
         openButton.setBackgroundTintList(
                 ColorStateList.valueOf(Color.WHITE)
         );
 
-        // DARK BLUE BUTTON TEXT
-
         openButton.setTextColor(
                 Color.rgb(23, 59, 104)
         );
-
-        // OPEN MENUMONEY APPLICATION
 
         openButton.setOnClickListener(v -> {
 
@@ -546,15 +694,12 @@ public class FloatingReminderService extends Service {
             );
 
             openIntent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK |
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
             );
 
             startActivity(openIntent);
-
         });
-
-        // ADD BUTTON BELOW REMINDER TEXT
 
         floatingContainer.addView(
                 openButton,
@@ -564,13 +709,56 @@ public class FloatingReminderService extends Service {
                 )
         );
 
+        // =================================================
+        // SNOOZE BUTTON
+        // =================================================
+
+        Button snoozeButton = new Button(this);
+
+        snoozeButton.setText("SNOOZE 5 MINUTES");
+
+        snoozeButton.setAllCaps(true);
+
+        snoozeButton.setBackgroundTintList(
+                ColorStateList.valueOf(
+                        Color.rgb(45, 110, 170)
+                )
+        );
+
+        snoozeButton.setTextColor(Color.WHITE);
+
+        snoozeButton.setOnClickListener(v -> {
+
+            Log.d(TAG, "User selected five-minute snooze.");
+
+            LoanReminderScheduler.snooze(
+                    FloatingReminderService.this
+            );
+
+            removeReminder();
+
+            stopSelf();
+        });
+
+        floatingContainer.addView(
+                snoozeButton,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        // =================================================
+        // ELEVATION
+        // =================================================
+
         floatingContainer.setElevation(
                 dpToPx(8)
         );
 
-        // =====================================================
-        // OVERLAY WINDOW PARAMETERS
-        // =====================================================
+        // =================================================
+        // OVERLAY TYPE
+        // =================================================
 
         int overlayType;
 
@@ -585,6 +773,10 @@ public class FloatingReminderService extends Service {
                     WindowManager.LayoutParams.TYPE_PHONE;
         }
 
+        // =================================================
+        // OVERLAY PARAMETERS
+        // =================================================
+
         WindowManager.LayoutParams params =
                 new WindowManager.LayoutParams(
 
@@ -594,8 +786,8 @@ public class FloatingReminderService extends Service {
 
                         overlayType,
 
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
 
                         PixelFormat.TRANSLUCENT
                 );
@@ -605,13 +797,14 @@ public class FloatingReminderService extends Service {
 
         params.y = dpToPx(positionYDp);
 
-        // =====================================================
-        // ADD OVERLAY TO SCREEN
-        // =====================================================
+        // =================================================
+        // DISPLAY OVERLAY
+        // =================================================
 
         try {
 
-            if (windowManager != null) {
+            if (windowManager != null
+                    && Settings.canDrawOverlays(this)) {
 
                 windowManager.addView(
                         floatingContainer,
@@ -620,7 +813,7 @@ public class FloatingReminderService extends Service {
 
                 Log.d(
                         TAG,
-                        "Floating reminder displayed successfully."
+                        "Floating reminder displayed."
                 );
 
                 Log.d(
@@ -643,6 +836,20 @@ public class FloatingReminderService extends Service {
                         "Account details included: "
                                 + !accountNumber.isEmpty()
                 );
+
+                // Start live countdown.
+                startCountdown();
+
+            } else {
+
+                Log.w(
+                        TAG,
+                        "Overlay permission unavailable."
+                );
+
+                removeReminder();
+
+                stopSelf();
             }
 
         } catch (Exception e) {
@@ -653,18 +860,95 @@ public class FloatingReminderService extends Service {
                     e
             );
 
-            floatingContainer = null;
-            floatingView = null;
+            removeReminder();
 
             stopSelf();
         }
     }
 
-    // =========================================================
-    // READ TEXT COLOUR
-    // =========================================================
+    // =====================================================
+    // LIVE COUNTDOWN
+    // =====================================================
 
-    private int getReminderTextColor(SharedPreferences prefs) {
+    private void startCountdown() {
+
+        stopCountdown();
+
+        countdownRunnable = new Runnable() {
+
+            @Override
+            public void run() {
+
+                if (countdownView == null) {
+                    return;
+                }
+
+                SharedPreferences prefs =
+                        getSharedPreferences(
+                                PREFS,
+                                Context.MODE_PRIVATE
+                        );
+
+                long nextReminder = prefs.getLong(
+                        "nextReminderAt",
+                        0L
+                );
+
+                long snoozeUntil = prefs.getLong(
+                        "reminderSnoozeUntil",
+                        0L
+                );
+
+                long now = System.currentTimeMillis();
+
+                if (snoozeUntil > now) {
+
+                    countdownView.setText(
+                            "Reminder snoozed. Reappears in: "
+                                    + LoanReminderScheduler.formatRemaining(
+                                            snoozeUntil
+                                    )
+                    );
+
+                } else {
+
+                    countdownView.setText(
+                            "Next scheduled reminder in: "
+                                    + LoanReminderScheduler.formatRemaining(
+                                            nextReminder
+                                    )
+                    );
+                }
+
+                countdownHandler.postDelayed(
+                        this,
+                        1000L
+                );
+            }
+        };
+
+        countdownHandler.post(countdownRunnable);
+    }
+
+    private void stopCountdown() {
+
+        if (countdownRunnable != null) {
+
+            countdownHandler.removeCallbacks(
+                    countdownRunnable
+            );
+
+            countdownRunnable = null;
+        }
+    }
+
+    // =====================================================
+    // READ TEXT COLOUR
+    // =====================================================
+
+    private int getReminderTextColor(
+            SharedPreferences prefs
+    ) {
 
         Object storedValue = prefs.getAll().get(
                 "reminderTextColor"
@@ -674,7 +958,9 @@ public class FloatingReminderService extends Service {
 
             try {
 
-                return Color.parseColor((String) storedValue);
+                return Color.parseColor(
+                        (String) storedValue
+                );
 
             } catch (IllegalArgumentException e) {
 
@@ -686,18 +972,17 @@ public class FloatingReminderService extends Service {
             }
         }
 
-        // Backward compatibility with previous integer values.
-
         if (storedValue instanceof Integer) {
+
             return (Integer) storedValue;
         }
 
         return Color.WHITE;
     }
 
-    // =========================================================
+    // =====================================================
     // MASK ACCOUNT NUMBER
-    // =========================================================
+    // =====================================================
 
     private String maskAccount(String accountNumber) {
 
@@ -707,6 +992,7 @@ public class FloatingReminderService extends Service {
         );
 
         if (digits.length() <= 4) {
+
             return "****";
         }
 
@@ -714,9 +1000,9 @@ public class FloatingReminderService extends Service {
                 digits.substring(digits.length() - 4);
     }
 
-    // =========================================================
-    // DISPLAY UTILITIES
-    // =========================================================
+    // =====================================================
+    // DP TO PIXELS
+    // =====================================================
 
     private int dpToPx(float dp) {
 
@@ -727,9 +1013,9 @@ public class FloatingReminderService extends Service {
         );
     }
 
-    // =========================================================
+    // =====================================================
     // FOREGROUND NOTIFICATION
-    // =========================================================
+    // =====================================================
 
     private Notification buildNotification() {
 
@@ -750,22 +1036,31 @@ public class FloatingReminderService extends Service {
         int smallIcon = getApplicationInfo().icon;
 
         if (smallIcon == 0) {
-            smallIcon = android.R.drawable.ic_dialog_info;
+
+            smallIcon =
+                    android.R.drawable.ic_dialog_info;
         }
 
         return builder
-                .setContentTitle("MenuMoney loan reminder")
+
+                .setContentTitle(
+                        "MenuMoney loan reminder"
+                )
+
                 .setContentText(
                         "Your floating loan reminder is active."
                 )
+
                 .setSmallIcon(smallIcon)
+
                 .setOngoing(true)
+
                 .build();
     }
 
-    // =========================================================
+    // =====================================================
     // NOTIFICATION CHANNEL
-    // =========================================================
+    // =====================================================
 
     private void createNotificationChannel() {
 
@@ -779,25 +1074,36 @@ public class FloatingReminderService extends Service {
                     );
 
             NotificationManager manager =
-                    getSystemService(NotificationManager.class);
+                    getSystemService(
+                            NotificationManager.class
+                    );
 
             if (manager != null) {
+
                 manager.createNotificationChannel(channel);
             }
         }
     }
 
-    // =========================================================
+    // =====================================================
     // REMOVE FLOATING REMINDER
-    // =========================================================
+    // =====================================================
 
     private void removeReminder() {
 
-        if (floatingContainer != null && windowManager != null) {
+        stopCountdown();
+
+        if (floatingContainer != null
+                && windowManager != null) {
 
             try {
 
-                windowManager.removeView(floatingContainer);
+                if (floatingContainer.isAttachedToWindow()) {
+
+                    windowManager.removeView(
+                            floatingContainer
+                    );
+                }
 
             } catch (Exception e) {
 
@@ -807,15 +1113,18 @@ public class FloatingReminderService extends Service {
                         e
                 );
             }
-
-            floatingContainer = null;
-            floatingView = null;
         }
+
+        floatingContainer = null;
+
+        floatingView = null;
+
+        countdownView = null;
     }
 
-    // =========================================================
-    // SERVICE CLEANUP
-    // =========================================================
+    // =====================================================
+    // SERVICE DESTROY
+    // =====================================================
 
     @Override
     public void onDestroy() {
@@ -830,8 +1139,13 @@ public class FloatingReminderService extends Service {
         super.onDestroy();
     }
 
+    // =====================================================
+    // BIND
+    // =====================================================
+
     @Override
     public IBinder onBind(Intent intent) {
+
         return null;
     }
 }

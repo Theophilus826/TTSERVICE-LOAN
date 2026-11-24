@@ -1,36 +1,68 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Network access -->
+    <!-- ====================================== -->
+    <!-- INTERNET ACCESS                        -->
+    <!-- ====================================== -->
+
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Floating loan reminders -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
-    <!-- Notifications -->
+    <!-- ====================================== -->
+    <!-- FLOATING LOAN REMINDERS                -->
+    <!-- ====================================== -->
+
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+
+    <!-- ====================================== -->
+    <!-- NOTIFICATIONS                          -->
+    <!-- ====================================== -->
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Restore reminders after reboot -->
+
+    <!-- ====================================== -->
+    <!-- BOOT RESTORATION                       -->
+    <!-- ====================================== -->
+
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Exact scheduled loan reminders -->
+
+    <!-- ====================================== -->
+    <!-- REMINDER ALARM SCHEDULING              -->
+    <!-- ====================================== -->
+
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- Background processing -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Android Calendar integration -->
+
+    <!-- ====================================== -->
+    <!-- ANDROID CALENDAR INTEGRATION           -->
+    <!-- ====================================== -->
+
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
-    <!-- Biometric authentication -->
+
+    <!-- ====================================== -->
+    <!-- BIOMETRIC AUTHENTICATION               -->
+    <!-- ====================================== -->
+
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <uses-permission
         android:name="android.permission.USE_FINGERPRINT"
         android:maxSdkVersion="28" />
+
 
     <application
         android:allowBackup="true"
@@ -39,6 +71,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
 
         <!-- ====================================== -->
         <!-- FLOATING LOAN REMINDER SERVICE         -->
@@ -53,29 +86,36 @@
 
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-enabled floating loan payment reminders when an unpaid installment is due" />
+                android:value="User-enabled floating loan payment reminders for unpaid loan installments" />
 
         </service>
 
 
         <!-- ====================================== -->
-        <!-- SCHEDULED LOAN REMINDER RECEIVER       -->
+        <!-- FLOATING REMINDER AND SNOOZE RECEIVER  -->
         <!-- ====================================== -->
 
         <receiver
             android:name=".FloatingReminderReceiver"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false">
+
+            <intent-filter>
+                <action android:name="com.menumoney.RECHECK_FLOATING_REMINDER" />
+                <action android:name="com.menumoney.RESTORE_AFTER_BOOT" />
+            </intent-filter>
+
+        </receiver>
 
 
         <!-- ====================================== -->
-        <!-- DEVICE BOOT AND APP UPDATE RESTORATION -->
+        <!-- DEVICE BOOT AND APP UPDATE RECEIVER   -->
         <!-- ====================================== -->
 
         <receiver
             android:name=".BootCompletedReceiver"
             android:enabled="true"
-            android:exported="false">
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -140,6 +180,7 @@
                 android:resource="@xml/loan_widget_info" />
 
         </receiver>
+
 
     </application>
 

@@ -349,18 +349,22 @@ export async function syncLoanWidget(): Promise<void> {
       }>("/settings/floating-reminder-appearance"),
     ]);
 
-    const schedules =
-      scheduleResult.status === "fulfilled" &&
-      Array.isArray(scheduleResult.value.data)
-        ? scheduleResult.value.data
-        : [];
-
     if (scheduleResult.status === "rejected") {
       console.warn(
         "[LoanWidget] Repayment schedules unavailable:",
         scheduleResult.reason
       );
+      return;
     }
+
+    if (!Array.isArray(scheduleResult.value.data)) {
+      console.warn(
+        "[LoanWidget] Repayment schedules response was invalid."
+      );
+      return;
+    }
+
+    const schedules = scheduleResult.value.data;
 
     const account =
       accountResult.status === "fulfilled"
@@ -372,18 +376,24 @@ export async function syncLoanWidget(): Promise<void> {
         "[LoanWidget] Repayment account unavailable:",
         accountResult.reason
       );
+      return;
     }
-
-    const settings =
-      settingsResult.status === "fulfilled"
-        ? settingsResult.value.data?.data
-        : undefined;
 
     if (settingsResult.status === "rejected") {
       console.error(
         "[LoanWidget] Settings request failed:",
         settingsResult.reason
       );
+      return;
+    }
+
+    const settings = settingsResult.value.data?.data;
+
+    if (!settings) {
+      console.warn(
+        "[LoanWidget] Widget settings response was invalid."
+      );
+      return;
     }
 
     const appearanceData =

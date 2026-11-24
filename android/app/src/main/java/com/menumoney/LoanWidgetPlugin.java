@@ -568,6 +568,16 @@ public class LoanWidgetPlugin extends Plugin {
         boolean overlayGranted =
                 Settings.canDrawOverlays(getContext());
 
+        AlarmManager alarmManager =
+                (AlarmManager) getContext().getSystemService(
+                        Context.ALARM_SERVICE
+                );
+
+        boolean exactAlarmGranted =
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                        || (alarmManager != null
+                        && alarmManager.canScheduleExactAlarms());
+
         JSObject result = new JSObject()
                 .put(
                         "asked",
@@ -583,7 +593,8 @@ public class LoanWidgetPlugin extends Plugin {
                                 false
                         )
                 )
-                .put("overlayGranted", overlayGranted);
+                .put("overlayGranted", overlayGranted)
+                .put("exactAlarmGranted", exactAlarmGranted);
 
         Log.d(
                 TAG,
@@ -658,6 +669,76 @@ public class LoanWidgetPlugin extends Plugin {
 
             call.reject(
                     "Could not open overlay settings: " + e.getMessage()
+            );
+        }
+    }
+
+    // =========================================================
+    // CHECK EXACT ALARM ACCESS
+    // =========================================================
+
+    @PluginMethod
+    public void checkExactAlarmPermission(PluginCall call) {
+
+        AlarmManager alarmManager =
+                (AlarmManager) getContext().getSystemService(
+                        Context.ALARM_SERVICE
+                );
+
+        boolean granted =
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                        || (alarmManager != null
+                        && alarmManager.canScheduleExactAlarms());
+
+        call.resolve(
+                new JSObject().put("granted", granted)
+        );
+    }
+
+    // =========================================================
+    // REQUEST EXACT ALARM ACCESS
+    // =========================================================
+
+    @PluginMethod
+    public void requestExactAlarmPermission(PluginCall call) {
+
+        Context context = getContext();
+
+        AlarmManager alarmManager =
+                (AlarmManager) context.getSystemService(
+                        Context.ALARM_SERVICE
+                );
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                || (alarmManager != null
+                && alarmManager.canScheduleExactAlarms())) {
+
+            call.resolve(
+                    new JSObject().put("granted", true)
+            );
+
+            return;
+        }
+
+        try {
+
+            Intent intent = new Intent(
+                    Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    Uri.parse("package:" + context.getPackageName())
+            );
+
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+
+            call.resolve(
+                    new JSObject().put("granted", false)
+            );
+
+        } catch (Exception e) {
+
+            Log.e(TAG, "Could not open exact alarm settings.", e);
+            call.reject(
+                    "Could not open exact alarm settings: " + e.getMessage()
             );
         }
     }

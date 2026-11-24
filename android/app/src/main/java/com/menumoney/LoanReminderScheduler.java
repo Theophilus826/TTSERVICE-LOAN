@@ -135,7 +135,7 @@ public final class LoanReminderScheduler {
     // SNOOZE FOR FIVE MINUTES
     // =====================================================
 
-    public static synchronized void snooze(Context context) {
+    public static synchronized boolean snooze(Context context) {
 
         SharedPreferences preferences = prefs(context);
 
@@ -147,12 +147,13 @@ public final class LoanReminderScheduler {
         );
 
         if (nextReminder <= 0L) {
-            return;
+            Log.e(TAG, "Cannot snooze without a scheduled reminder.");
+            return false;
         }
 
         long snoozeUntil = now + SNOOZE_INTERVAL;
 
-        preferences.edit()
+        boolean saved = preferences.edit()
 
                 .putLong(
                         "reminderSnoozeUntil",
@@ -164,11 +165,17 @@ public final class LoanReminderScheduler {
                         false
                 )
 
-                .apply();
+                .commit();
+
+        if (!saved) {
+            Log.e(TAG, "Could not persist the reminder snooze.");
+            return false;
+        }
 
         scheduleNextWake(context);
 
         Log.d(TAG, "Reminder snoozed until: " + snoozeUntil);
+        return true;
     }
 
     // =====================================================

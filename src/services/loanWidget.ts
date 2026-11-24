@@ -59,12 +59,17 @@ interface LoanWidgetPlugin {
 
   requestOverlayPermission(): Promise<{ granted: boolean }>;
 
+  checkExactAlarmPermission(): Promise<{ granted: boolean }>;
+
+  requestExactAlarmPermission(): Promise<{ granted: boolean }>;
+
   getFloatingReminderConsentStatus(options: {
     userId: string;
   }): Promise<{
     asked: boolean;
     enabled: boolean;
     overlayGranted: boolean;
+    exactAlarmGranted: boolean;
   }>;
 
   setFloatingReminderConsent(options: {
@@ -532,6 +537,7 @@ export async function getFloatingReminderConsentStatus(
       asked: false,
       enabled: false,
       overlayGranted: false,
+      exactAlarmGranted: false,
     };
   }
 
@@ -569,6 +575,26 @@ export async function checkFloatingOverlayPermission(): Promise<boolean> {
     await NativeLoanWidget.checkOverlayPermission();
 
   return result.granted;
+}
+
+export async function checkExactAlarmPermission(): Promise<boolean> {
+  if (!isNative()) return false;
+
+  const result =
+    await NativeLoanWidget.checkExactAlarmPermission();
+
+  return result.granted;
+}
+
+export async function requestExactAlarmPermission(): Promise<void> {
+  if (!isNative()) return;
+
+  const result =
+    await NativeLoanWidget.checkExactAlarmPermission();
+
+  if (!result.granted) {
+    await NativeLoanWidget.requestExactAlarmPermission();
+  }
 }
 
 /**

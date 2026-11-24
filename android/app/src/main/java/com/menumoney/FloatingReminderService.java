@@ -731,9 +731,14 @@ public class FloatingReminderService extends Service {
 
             Log.d(TAG, "User selected five-minute snooze.");
 
-            LoanReminderScheduler.snooze(
+            boolean snoozed = LoanReminderScheduler.snooze(
                     FloatingReminderService.this
             );
+
+            if (!snoozed) {
+                Log.e(TAG, "Reminder snooze could not be scheduled.");
+                return;
+            }
 
             removeReminder();
 

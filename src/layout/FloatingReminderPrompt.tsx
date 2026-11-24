@@ -6,7 +6,9 @@ import API from "../services/Api";
 
 import {
   checkFloatingOverlayPermission,
+  checkExactAlarmPermission,
   getFloatingReminderConsentStatus,
+  requestExactAlarmPermission,
   requestFloatingOverlayPermission,
   setFloatingReminderConsent,
   syncLoanWidget,
@@ -20,6 +22,7 @@ export default function FloatingReminderPrompt() {
   const [adminEnabled, setAdminEnabled] = useState(false);
   const [message, setMessage] = useState("");
   const [waitingForSettings, setWaitingForSettings] = useState(false);
+  const [needsExactAlarm, setNeedsExactAlarm] = useState(false);
 
   const userId = user?._id;
 
@@ -69,6 +72,7 @@ export default function FloatingReminderPrompt() {
       if (!enabled) {
         setShowPrompt(false);
         setWaitingForSettings(false);
+        setNeedsExactAlarm(false);
         setMessage("");
 
         console.log("[FloatingReminder] Admin switch is OFF");
@@ -83,16 +87,36 @@ export default function FloatingReminderPrompt() {
         asked: status.asked,
         enabled: status.enabled,
         overlayGranted: status.overlayGranted,
+        exactAlarmGranted: status.exactAlarmGranted,
       });
 
       if (status.asked) {
+        if (
+          status.enabled &&
+          (!status.overlayGranted || !status.exactAlarmGranted)
+        ) {
+          const exactAlarmMissing =
+            status.overlayGranted && !status.exactAlarmGranted;
+
+          setNeedsExactAlarm(exactAlarmMissing);
+          setShowPrompt(true);
+          setMessage(
+            !status.overlayGranted
+              ? "Allow display-over-other-apps access to show reminders."
+              : "Allow exact alarms so snoozed reminders can resume on time.",
+          );
+          return;
+        }
+
         setShowPrompt(false);
         setWaitingForSettings(false);
+        setNeedsExactAlarm(false);
 
         console.log("[FloatingReminder] User already answered");
         return;
       }
 
+      setNeedsExactAlarm(false);
       setShowPrompt(true);
 
       console.log("[FloatingReminder] Prompt should appear");
@@ -122,6 +146,7 @@ export default function FloatingReminderPrompt() {
       setShowPrompt(false);
       setWaitingForSettings(false);
       setAdminEnabled(false);
+      setNeedsExactAlarm(false);
       setMessage("");
       return;
     }
@@ -149,21 +174,28 @@ export default function FloatingReminderPrompt() {
       void (async () => {
         if (waitingForSettings) {
           try {
-            const granted =
-              await checkFloatingOverlayPermission();
+            const [overlayGranted, exactAlarmGranted] =
+              await Promise.all([
+                checkFloatingOverlayPermission(),
+                checkExactAlarmPermission(),
+              ]);
 
             console.log(
-              "[FloatingReminder] Overlay permission:",
-              granted
+              "[FloatingReminder] Reminder permissions:",
+              { overlayGranted, exactAlarmGranted }
             );
 
             setWaitingForSettings(false);
 
-            if (granted) {
+            if (overlayGranted && exactAlarmGranted) {
+              setNeedsExactAlarm(false);
               await syncLoanWidget();
 
+              setMessage("");
+            } else if (overlayGranted) {
+              setNeedsExactAlarm(true);
               setMessage(
-                ""
+                "Exact alarms are off. Snoozed reminders may be delayed; choose Enable to open Android Settings.",
               );
             } else {
               setMessage(
@@ -242,6 +274,21 @@ export default function FloatingReminderPrompt() {
       );
 
       if (granted) {
+        const exactAlarmGranted =
+          await checkExactAlarmPermission();
+
+        if (!exactAlarmGranted) {
+          setNeedsExactAlarm(true);
+          setWaitingForSettings(true);
+          setMessage(
+            "Allow exact alarms so snoozed reminders can resume on time."
+          );
+
+          await requestExactAlarmPermission();
+          return;
+        }
+
+        setNeedsExactAlarm(false);
         await syncLoanWidget();
 
         setShowPrompt(false);
@@ -254,6 +301,7 @@ export default function FloatingReminderPrompt() {
       }
 
       setWaitingForSettings(true);
+      setNeedsExactAlarm(false);
 
       setMessage(
         "Allow MenuMoney to display over other apps. Return here afterward to finish setup."
@@ -302,6 +350,16 @@ export default function FloatingReminderPrompt() {
     setMessage("");
 
     try {
+      if (needsExactAlarm) {
+        setShowPrompt(false);
+        setWaitingForSettings(false);
+        setNeedsExactAlarm(false);
+        setMessage(
+          "Reminders remain enabled, but snoozed reminders may be delayed without exact alarm access."
+        );
+        return;
+      }
+
       await setFloatingReminderConsent(userId, false);
 
       console.log(
@@ -366,13 +424,15 @@ export default function FloatingReminderPrompt() {
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Would you like MenuMoney to show a small reminder over
-          other apps when you have an unpaid loan installment?
+          {needsExactAlarm
+            ? "Allow MenuMoney to schedule exact alarms so a snoozed loan reminder can resume even when the app is closed."
+            : "Would you like MenuMoney to show a small reminder over other apps when you have an unpaid loan installment?"}
         </p>
 
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          You can change your choice later. Android may ask you to
-          allow MenuMoney to display over other apps.
+          {needsExactAlarm
+            ? "This Android permission is needed for reliable five-minute snooze timing. You can continue without it, but Android may delay reminders."
+            : "You can change your choice later. Android may ask you to allow MenuMoney to display over other apps."}
         </p>
 
         {message && (
@@ -388,7 +448,7 @@ export default function FloatingReminderPrompt() {
             onClick={() => void handleNotNow()}
             className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-700 disabled:opacity-50"
           >
-            Not now
+            {needsExactAlarm ? "Continue without" : "Not now"}
           </button>
 
           <button
@@ -397,7 +457,11 @@ export default function FloatingReminderPrompt() {
             onClick={() => void handleEnable()}
             className="flex-1 rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-50"
           >
-            {busy ? "Please wait…" : "Enable"}
+            {busy
+              ? "Please wait…"
+              : needsExactAlarm
+                ? "Allow exact alarms"
+                : "Enable"}
           </button>
         </div>
       </section>

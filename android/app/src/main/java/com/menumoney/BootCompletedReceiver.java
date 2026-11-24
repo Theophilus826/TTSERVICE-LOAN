@@ -42,6 +42,7 @@ public class BootCompletedReceiver extends BroadcastReceiver {
         // ---------------------------------------------
 
         try {
+            LoanReminderScheduler.scheduleNextWake(appContext);
 
             Intent restoreIntent = new Intent(
                     appContext,
@@ -56,7 +57,7 @@ public class BootCompletedReceiver extends BroadcastReceiver {
 
             Log.d(
                     TAG,
-                    "Floating reminder restoration broadcast sent."
+                    "Floating reminder alarm restored and recheck broadcast sent."
             );
 
         } catch (Exception e) {

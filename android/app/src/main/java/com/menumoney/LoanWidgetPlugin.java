@@ -815,6 +815,8 @@ public class LoanWidgetPlugin extends Plugin {
         );
 
         // Temporary test display data.
+        long testReminderAt = System.currentTimeMillis();
+
         prefs.edit()
                 .putString("activeUserId", userId)
                 .putString("amount", "TEST: ₦5,000")
@@ -826,6 +828,9 @@ public class LoanWidgetPlugin extends Plugin {
                 .putBoolean("paymentDue", true)
                 .putBoolean("hasCustomerData", true)
                 .putBoolean("floatingReminderEnabled", true)
+                .putString("nextReminderInstallmentId", "floating-reminder-test")
+                .putLong("nextInstallmentDueAt", testReminderAt)
+                .putLong("nextReminderAt", testReminderAt)
                 .putLong("reminderSnoozeUntil", 0L)
                 .commit();
 

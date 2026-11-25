@@ -15,7 +15,7 @@ import authApi, {
   type UserRole,
 } from "../services/AuthService";
 
-import { clearLoanWidget, syncLoanWidget } from "../services/loanWidget";
+import { syncLoanWidget } from "../services/loanWidget";
 
 import biometricAuth from "../services/biometricAuth";
 
@@ -243,12 +243,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   ======================================================= */
 
   useEffect(() => {
-    const clearWidget = (): void => {
-      void clearLoanWidget().catch((error) => {
-        console.error("clearLoanWidget failed:", error);
-      });
-    };
-
     const syncWidget = (): void => {
       if (document.visibilityState === "visible" && user) {
         void syncLoanWidget().catch((error) => {
@@ -261,8 +255,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       syncWidget();
 
       document.addEventListener("visibilitychange", syncWidget);
-    } else {
-      clearWidget();
     }
 
     return () => {
@@ -548,12 +540,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await authApi.logout();
     } finally {
-      try {
-        await clearLoanWidget();
-      } catch (error) {
-        console.error("Loan widget cleanup failed:", error);
-      }
-
       // Preserve biometric credentials.
       // Logout must not automatically disable
       // fingerprint login.

@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../context/AuthContext";
-import API from "../services/Api";
 
 import {
   checkFloatingOverlayPermission,
@@ -14,6 +13,8 @@ import {
   syncLoanWidget,
 } from "../services/loanWidget";
 
+type SetupStep = "consent" | "overlay" | "exact";
+
 export default function FloatingReminderPrompt() {
   const { user, initializing } = useAuth();
 
@@ -22,212 +23,171 @@ export default function FloatingReminderPrompt() {
   const [adminEnabled, setAdminEnabled] = useState(false);
   const [message, setMessage] = useState("");
   const [waitingForSettings, setWaitingForSettings] = useState(false);
-  const [needsExactAlarm, setNeedsExactAlarm] = useState(false);
+  const [step, setStep] = useState<SetupStep>("consent");
 
   const userId = user?._id;
-
   const checkingRef = useRef(false);
 
-  // Check admin settings and customer consent for every authenticated role.
+  const stepNumber =
+    step === "consent" ? 1 : step === "overlay" ? 2 : 3;
+
+  // Check all permissions and determine the next setup step.
   const checkStatus = useCallback(async () => {
     if (
       initializing ||
       !userId ||
       !Capacitor.isNativePlatform()
     ) {
-      console.log("[FloatingReminder] Check skipped", {
-        initializing,
-        userId,
-        platform: Capacitor.getPlatform(),
-      });
-
       setShowPrompt(false);
       return;
     }
 
-    if (checkingRef.current) {
-      console.log("[FloatingReminder] Check already running");
-      return;
-    }
+    if (checkingRef.current) return;
 
     checkingRef.current = true;
 
     try {
-      console.log("[FloatingReminder] Checking admin setting");
+      const response = await fetchWidgetSetting();
 
-      const response = await API.get<{
-        success?: boolean;
-        data?: {
-          floatingReminderEnabled?: boolean;
-        };
-      }>("/settings/widget");
+      setAdminEnabled(response);
 
-      const enabled =
-        response.data?.data?.floatingReminderEnabled === true;
-
-      console.log("[FloatingReminder] Admin setting:", enabled);
-
-      setAdminEnabled(enabled);
-
-      if (!enabled) {
+      if (!response) {
         setShowPrompt(false);
-        setWaitingForSettings(false);
-        setNeedsExactAlarm(false);
-        setMessage("");
-
-        console.log("[FloatingReminder] Admin switch is OFF");
         return;
       }
 
       const status =
         await getFloatingReminderConsentStatus(userId);
 
-      console.log("[FloatingReminder] Consent status", {
-        userId,
-        asked: status.asked,
-        enabled: status.enabled,
-        overlayGranted: status.overlayGranted,
-        exactAlarmGranted: status.exactAlarmGranted,
-      });
-
-      if (status.asked) {
-        if (
-          status.enabled &&
-          (!status.overlayGranted || !status.exactAlarmGranted)
-        ) {
-          const exactAlarmMissing =
-            status.overlayGranted && !status.exactAlarmGranted;
-
-          setNeedsExactAlarm(exactAlarmMissing);
-          setShowPrompt(true);
-          setMessage(
-            !status.overlayGranted
-              ? "Allow display-over-other-apps access to show reminders."
-              : "Allow exact alarms so snoozed reminders can resume on time.",
-          );
-          return;
-        }
-
+      // User has already declined.
+      if (status.asked && !status.enabled) {
         setShowPrompt(false);
-        setWaitingForSettings(false);
-        setNeedsExactAlarm(false);
-
-        console.log("[FloatingReminder] User already answered");
         return;
       }
 
-      setNeedsExactAlarm(false);
-      setShowPrompt(true);
+      // User has not yet made a choice.
+      if (!status.asked) {
+        setStep("consent");
+        setShowPrompt(true);
+        return;
+      }
 
-      console.log("[FloatingReminder] Prompt should appear");
+      // Check overlay permission.
+      if (!status.overlayGranted) {
+        setStep("overlay");
+        setShowPrompt(true);
+        return;
+      }
+
+      // Check exact alarm permission.
+      if (!status.exactAlarmGranted) {
+        setStep("exact");
+        setShowPrompt(true);
+        return;
+      }
+
+      // All permissions granted.
+      setStep("exact");
+      setShowPrompt(false);
+      setMessage("All reminder permissions are enabled.");
+
+      await syncLoanWidget();
 
     } catch (error) {
-      console.error(
-        "[FloatingReminder] Status check FAILED",
-        error
-      );
-
-      setShowPrompt(false);
-
+      console.error("[FloatingReminder] Check failed", error);
       setMessage(
-        "We couldn't check reminder settings. Please check your connection and try again."
+        "We couldn't check your reminder settings. Please try again."
       );
-
     } finally {
       checkingRef.current = false;
     }
   }, [initializing, userId]);
 
-  // Run when authentication finishes or the logged-in user changes.
+  // Fetch the administrator's widget setting.
+  async function fetchWidgetSetting(): Promise<boolean> {
+    const API = (await import("../services/Api")).default;
+
+    const response = await API.get<{
+      data?: {
+        floatingReminderEnabled?: boolean;
+      };
+    }>("/settings/widget");
+
+    return (
+      response.data?.data?.floatingReminderEnabled === true
+    );
+  }
+
+  // Initial check after login.
   useEffect(() => {
     if (initializing) return;
 
     if (!userId) {
       setShowPrompt(false);
-      setWaitingForSettings(false);
-      setAdminEnabled(false);
-      setNeedsExactAlarm(false);
       setMessage("");
+      setAdminEnabled(false);
       return;
     }
 
     if (!Capacitor.isNativePlatform()) return;
 
     void checkStatus();
-
   }, [initializing, userId, checkStatus]);
 
-  // Recheck Android overlay permission when returning to the app.
+  // Recheck permissions when the user returns from Android Settings.
   useEffect(() => {
-    if (
-      !userId ||
-      !Capacitor.isNativePlatform()
-    ) {
-      return;
-    }
+    if (!userId || !Capacitor.isNativePlatform()) return;
 
-    const onVisibilityChange = () => {
+    const onVisibilityChange = async () => {
       if (document.visibilityState !== "visible") return;
 
-      console.log("[FloatingReminder] App returned to foreground");
+      if (!waitingForSettings) return;
 
-      void (async () => {
-        if (waitingForSettings) {
-          try {
-            const [overlayGranted, exactAlarmGranted] =
-              await Promise.all([
-                checkFloatingOverlayPermission(),
-                checkExactAlarmPermission(),
-              ]);
+      setBusy(true);
+      setMessage("Checking your permissions...");
 
-            console.log(
-              "[FloatingReminder] Reminder permissions:",
-              { overlayGranted, exactAlarmGranted }
-            );
+      try {
+        const [overlayGranted, exactAlarmGranted] =
+          await Promise.all([
+            checkFloatingOverlayPermission(),
+            checkExactAlarmPermission(),
+          ]);
 
-            setWaitingForSettings(false);
+        setWaitingForSettings(false);
 
-            if (overlayGranted && exactAlarmGranted) {
-              setNeedsExactAlarm(false);
-              await syncLoanWidget();
+        if (!overlayGranted) {
+          setStep("overlay");
+          setMessage(
+            "Display over other apps permission is still required."
+          );
+          setShowPrompt(true);
+        } else if (!exactAlarmGranted) {
+          setStep("exact");
+          setMessage(
+            "Please allow exact alarms to complete setup."
+          );
+          setShowPrompt(true);
+        } else {
+          await syncLoanWidget();
 
-              setMessage("");
-            } else if (overlayGranted) {
-              setNeedsExactAlarm(true);
-              setMessage(
-                "Exact alarms are off. Snoozed reminders may be delayed; choose Enable to open Android Settings.",
-              );
-            } else {
-              setMessage(
-                "Overlay permission is still off. Enable it in Android Settings."
-              );
-            }
-
-          } catch (error) {
-            console.error(
-              "[FloatingReminder] Permission recheck FAILED",
-              error
-            );
-
-            setWaitingForSettings(false);
-
-            setMessage(
-              "We couldn't verify Android permission. Please try again."
-            );
-          }
+          setShowPrompt(false);
+          setMessage("Payment reminders are now fully enabled.");
         }
 
         await checkStatus();
 
-        try {
-          await syncLoanWidget();
-        } catch (error) {
-          console.error(
-            "[FloatingReminder] Widget sync FAILED",
-            error
-          );
-        }
-      })();
+      } catch (error) {
+        console.error(
+          "[FloatingReminder] Permission check failed",
+          error
+        );
+
+        setMessage(
+          "We couldn't verify your permissions. Please try again."
+        );
+      } finally {
+        setBusy(false);
+      }
     };
 
     document.addEventListener(
@@ -241,230 +201,334 @@ export default function FloatingReminderPrompt() {
         onVisibilityChange
       );
     };
+  }, [userId, waitingForSettings, checkStatus]);
 
-  }, [
-    userId,
-    waitingForSettings,
-    checkStatus,
-  ]);
-
-  // Enable floating reminders.
-  const handleEnable = async () => {
+  // Move to the next permission automatically.
+  const handleContinue = async () => {
     if (!userId || busy || !adminEnabled) return;
 
     setBusy(true);
     setMessage("");
 
-    console.log("[FloatingReminder] Enable clicked", {
-      userId,
-      platform: Capacitor.getPlatform(),
-    });
-
     try {
-      await setFloatingReminderConsent(userId, true);
+      // STEP 1: Save customer consent.
+      if (step === "consent") {
+        await setFloatingReminderConsent(userId, true);
 
-      console.log("[FloatingReminder] Consent saved as enabled");
-
-      const granted =
-        await checkFloatingOverlayPermission();
-
-      console.log(
-        "[FloatingReminder] Current overlay permission:",
-        granted
-      );
-
-      if (granted) {
-        const exactAlarmGranted =
-          await checkExactAlarmPermission();
-
-        if (!exactAlarmGranted) {
-          setNeedsExactAlarm(true);
-          setWaitingForSettings(true);
-          setMessage(
-            "Allow exact alarms so snoozed reminders can resume on time."
-          );
-
-          await requestExactAlarmPermission();
-          return;
-        }
-
-        setNeedsExactAlarm(false);
-        await syncLoanWidget();
-
-        setShowPrompt(false);
-
+        setStep("overlay");
         setMessage(
-          "Floating reminders are enabled when a payment is due."
+          "Great! Now allow MenuMoney to display reminders over other apps."
         );
+
+        const granted = await checkFloatingOverlayPermission();
+
+        if (granted) {
+          setStep("exact");
+          setMessage("Display permission already granted.");
+        }
 
         return;
       }
 
-      setWaitingForSettings(true);
-      setNeedsExactAlarm(false);
+      // STEP 2: Request floating overlay permission.
+      if (step === "overlay") {
+        const granted = await checkFloatingOverlayPermission();
 
-      setMessage(
-        "Allow MenuMoney to display over other apps. Return here afterward to finish setup."
-      );
+        if (granted) {
+          setStep("exact");
+          setMessage("Display permission granted. One more step!");
+          return;
+        }
 
-      try {
-        await requestFloatingOverlayPermission();
-
-        console.log(
-          "[FloatingReminder] Android permission settings requested"
-        );
-
-      } catch (error) {
-        console.error(
-          "[FloatingReminder] Could not open Android settings",
-          error
-        );
-
-        setWaitingForSettings(false);
+        setWaitingForSettings(true);
 
         setMessage(
-          "Android settings could not be opened. Go to Settings > Apps > MenuMoney > Display over other apps."
+          "Opening Android Settings. Allow MenuMoney to display over other apps, then return here."
         );
+
+        try {
+          await requestFloatingOverlayPermission();
+        } catch (error) {
+          setWaitingForSettings(false);
+          setMessage(
+            "Go to Settings > Apps > MenuMoney > Display over other apps."
+          );
+          console.error(error);
+        }
+
+        return;
+      }
+
+      // STEP 3: Request exact alarm permission.
+      if (step === "exact") {
+        const granted = await checkExactAlarmPermission();
+
+        if (granted) {
+          await syncLoanWidget();
+          setShowPrompt(false);
+          setMessage("Payment reminders are fully enabled!");
+          return;
+        }
+
+        setWaitingForSettings(true);
+
+        setMessage(
+          "Opening Android Settings. Allow exact alarms, then return here."
+        );
+
+        try {
+          await requestExactAlarmPermission();
+        } catch (error) {
+          setWaitingForSettings(false);
+          setMessage(
+            "Please enable exact alarms in Android Settings."
+          );
+          console.error(error);
+        }
       }
 
     } catch (error) {
-      console.error(
-        "[FloatingReminder] Enable FAILED",
-        error
-      );
+      console.error("[FloatingReminder] Setup failed", error);
 
       setMessage(
-        "We couldn't complete setup. Please try again."
+        "Something went wrong. Please try again."
       );
-
     } finally {
       setBusy(false);
     }
   };
 
-  // Decline floating reminders.
+  // Handle skipping or declining.
   const handleNotNow = async () => {
     if (!userId || busy) return;
 
     setBusy(true);
-    setMessage("");
 
     try {
-      if (needsExactAlarm) {
+      if (step === "consent") {
+        await setFloatingReminderConsent(userId, false);
+        setShowPrompt(false);
+        setMessage("");
+      } else {
         setShowPrompt(false);
         setWaitingForSettings(false);
-        setNeedsExactAlarm(false);
+
         setMessage(
-          "Reminders remain enabled, but snoozed reminders may be delayed without exact alarm access."
+          "You can enable the remaining reminder permissions later."
         );
-        return;
       }
-
-      await setFloatingReminderConsent(userId, false);
-
-      console.log(
-        "[FloatingReminder] Consent saved as declined",
-        { userId }
-      );
-
-      setShowPrompt(false);
-      setWaitingForSettings(false);
-
     } catch (error) {
       console.error(
-        "[FloatingReminder] Saving choice FAILED",
+        "[FloatingReminder] Saving choice failed",
         error
       );
 
-      setMessage(
-        "We couldn't save your choice. Please try again."
-      );
-
+      setMessage("We couldn't save your choice. Please try again.");
     } finally {
       setBusy(false);
     }
   };
 
-  // Do not show on browser or logged-out sessions.
   if (
     initializing ||
     !userId ||
     !Capacitor.isNativePlatform() ||
+    !adminEnabled ||
     !showPrompt
   ) {
     return message && userId ? (
       <div
         role="status"
-        className="fixed bottom-24 left-4 right-4 z-[1000] mx-auto max-w-md rounded-xl bg-slate-900 p-3 text-sm text-white shadow-lg"
+        className="fixed bottom-24 left-4 right-4 z-[1000] mx-auto max-w-md rounded-xl bg-slate-900 p-4 text-sm text-white shadow-lg"
       >
         {message}
       </div>
     ) : null;
   }
 
-  return (
-    <>
-      <div className="fixed inset-0 z-[1000] bg-black/50" />
+  const steps = [
+    {
+      number: 1,
+      title: "Enable payment reminders",
+      description:
+        "Allow MenuMoney to show helpful reminders when your loan installment is due.",
+      icon: "🔔",
+      active: step === "consent",
+      completed: step !== "consent",
+      button: "Enable reminders",
+    },
+    {
+      number: 2,
+      title: "Display over other apps",
+      description:
+        "Allow MenuMoney to show a small floating reminder while you use other apps.",
+      icon: "📱",
+      active: step === "overlay",
+      completed: step === "exact",
+      button: "Allow display permission",
+    },
+    {
+      number: 3,
+      title: "Allow exact alarms",
+      description:
+        "Make sure snoozed reminders resume at the correct time, even when the app is closed.",
+      icon: "⏰",
+      active: step === "exact",
+      completed: false,
+      button: "Enable exact alarms",
+    },
+  ];
 
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="floating-reminder-title"
-        className="fixed left-4 right-4 top-1/2 z-[1001] mx-auto w-auto max-w-md -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl"
-      >
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-2xl">
-          🔔
+  const activeStep = steps[stepNumber - 1];
+
+  return (
+    <div className="fixed inset-0 z-[1000] overflow-y-auto bg-slate-50">
+      <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-5 py-8 sm:justify-center sm:px-8">
+
+        {/* Header */}
+        <div className="mb-7 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100 text-3xl">
+            🔔
+          </div>
+
+          <h1 className="text-2xl font-bold text-slate-900">
+            Set up payment reminders
+          </h1>
+
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Complete these quick steps so you never miss an
+            important loan payment.
+          </p>
         </div>
 
-        <h2
-          id="floating-reminder-title"
-          className="text-xl font-bold text-slate-900"
-        >
-          Floating payment reminders
-        </h2>
+        {/* Progress */}
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-800">
+              Setup progress
+            </span>
 
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          {needsExactAlarm
-            ? "Allow MenuMoney to schedule exact alarms so a snoozed loan reminder can resume even when the app is closed."
-            : "Would you like MenuMoney to show a small reminder over other apps when you have an unpaid loan installment?"}
-        </p>
+            <span className="text-sm font-bold text-blue-700">
+              Step {stepNumber} of 3
+            </span>
+          </div>
 
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          {needsExactAlarm
-            ? "This Android permission is needed for reliable five-minute snooze timing. You can continue without it, but Android may delay reminders."
-            : "You can change your choice later. Android may ask you to allow MenuMoney to display over other apps."}
-        </p>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-blue-600 transition-all duration-500"
+              style={{
+                width: `${((stepNumber - 1) / 3) * 100 + 15}%`,
+              }}
+            />
+          </div>
+        </div>
 
+        {/* All setup steps on one page */}
+        <div className="space-y-4">
+          {steps.map((item) => (
+            <div
+              key={item.number}
+              className={`rounded-2xl border bg-white p-5 transition-all ${
+                item.active
+                  ? "border-blue-500 shadow-md ring-1 ring-blue-100"
+                  : item.completed
+                  ? "border-green-200"
+                  : "border-slate-200 opacity-65"
+              }`}
+            >
+              <div className="flex items-start gap-4">
+
+                {/* Step icon */}
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl ${
+                    item.completed
+                      ? "bg-green-100"
+                      : item.active
+                      ? "bg-blue-100"
+                      : "bg-slate-100"
+                  }`}
+                >
+                  {item.completed ? "✓" : item.icon}
+                </div>
+
+                <div className="min-w-0 flex-1">
+
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Step {item.number}
+                    </span>
+
+                    {item.completed && (
+                      <span className="text-xs font-semibold text-green-600">
+                        Completed
+                      </span>
+                    )}
+
+                    {item.active && (
+                      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                        Current step
+                      </span>
+                    )}
+                  </div>
+
+                  <h2 className="font-bold text-slate-900">
+                    {item.title}
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    {item.description}
+                  </p>
+
+                  {item.active && (
+                    <button
+                      type="button"
+                      disabled={busy || waitingForSettings}
+                      onClick={() => void handleContinue()}
+                      className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {busy
+                        ? "Please wait..."
+                        : waitingForSettings
+                        ? "Waiting for Settings..."
+                        : item.button}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Status message */}
         {message && (
-          <p role="status" className="mt-3 text-sm text-blue-700">
+          <div
+            role="status"
+            className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800"
+          >
             {message}
-          </p>
+          </div>
         )}
 
-        <div className="mt-6 flex gap-3">
+        {/* Footer */}
+        <div className="mt-6 text-center">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || waitingForSettings}
             onClick={() => void handleNotNow()}
-            className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-700 disabled:opacity-50"
+            className="rounded-lg px-5 py-3 text-sm font-semibold text-slate-500 hover:text-slate-800 disabled:opacity-50"
           >
-            {needsExactAlarm ? "Continue without" : "Not now"}
+            {step === "consent"
+              ? "Not now"
+              : "Continue without this permission"}
           </button>
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void handleEnable()}
-            className="flex-1 rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white disabled:opacity-50"
-          >
-            {busy
-              ? "Please wait…"
-              : needsExactAlarm
-                ? "Allow exact alarms"
-                : "Enable"}
-          </button>
+          <p className="mt-2 text-xs leading-5 text-slate-400">
+            You don't need to change your reminder permissions later
+            in Android Settings.
+          </p>
         </div>
-      </section>
-    </>
+
+      </div>
+    </div>
   );
 }

@@ -531,6 +531,7 @@ export async function getFloatingReminderConsentStatus(
   asked: boolean;
   enabled: boolean;
   overlayGranted: boolean;
+  exactAlarmGranted: boolean;
 }> {
   if (!isNative() || !userId) {
     return {

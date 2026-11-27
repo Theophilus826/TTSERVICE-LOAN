@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../context/AuthContext";
+import { useLoanProtection } from "../services/useLoanProtection";
 
 import {
   checkFloatingOverlayPermission,
@@ -336,14 +337,22 @@ export default function FloatingReminderPrompt() {
     !adminEnabled ||
     !showPrompt
   ) {
-    return message && userId ? (
-      <div
-        role="status"
-        className="fixed bottom-24 left-4 right-4 z-[1000] mx-auto max-w-md rounded-xl bg-slate-900 p-4 text-sm text-white shadow-lg"
-      >
-        {message}
-      </div>
-    ) : null;
+    const canShowLoanProtection =
+      !initializing && !!userId && Capacitor.isNativePlatform();
+
+    return (
+      <>
+        {message && userId && (
+          <div
+            role="status"
+            className="fixed bottom-24 left-4 right-4 z-[1000] mx-auto max-w-md rounded-xl bg-slate-900 p-4 text-sm text-white shadow-lg"
+          >
+            {message}
+          </div>
+        )}
+        {canShowLoanProtection && <LoanProtectionPanel />}
+      </>
+    );
   }
 
   const steps = [
@@ -528,7 +537,118 @@ export default function FloatingReminderPrompt() {
           </p>
         </div>
 
+        {/* Optional Android uninstall protection */}
+        <LoanProtectionPanel />
+
       </div>
     </div>
+  );
+}
+
+/**
+ * Optional protection that adds an extra confirmation step before the app
+ * can be uninstalled while administrator protection is active.
+ */
+function LoanProtectionPanel() {
+  const {
+    active,
+    loading,
+    available,
+    requestActivation,
+    deactivate,
+  } = useLoanProtection();
+
+  const handleActivation = async () => {
+    try {
+      const enabled = await requestActivation();
+      window.alert(
+        enabled
+          ? "Loan reminder protection activated successfully."
+          : "Protection was not activated."
+      );
+    } catch (error) {
+      console.error("[LoanProtection] Activation failed", error);
+      window.alert("Unable to activate protection.");
+    }
+  };
+
+  const handleDeactivation = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to disable loan reminder protection?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const success = await deactivate();
+      window.alert(
+        success
+          ? "Protection disabled successfully."
+          : "Unable to disable protection."
+      );
+    } catch (error) {
+      console.error("[LoanProtection] Deactivation failed", error);
+      window.alert("An error occurred.");
+    }
+  };
+
+  return (
+    <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="font-bold text-slate-900">
+          Loan Reminder Protection
+        </h2>
+        {available && (
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              active
+                ? "bg-green-100 text-green-700"
+                : "bg-slate-100 text-slate-600"
+            }`}
+          >
+            {active ? "Enabled" : "Disabled"}
+          </span>
+        )}
+      </div>
+
+      {!available ? (
+        <p className="text-sm leading-6 text-slate-500">
+          Loan protection is available on supported Android devices.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm leading-6 text-slate-600">
+            Android may require you to turn off this optional administrator
+            setting before uninstalling MenuMoney. You can turn it off at any
+            time; it is not linked to your loan or payment status.
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            It does not prevent uninstalling, lock your phone, access your
+            personal files, or enforce loan repayment.
+          </p>
+
+          {!active ? (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void handleActivation()}
+              className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Please wait..." : "Enable Protection"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void handleDeactivation()}
+              className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Please wait..." : "Disable Protection"}
+            </button>
+          )}
+        </>
+      )}
+    </section>
   );
 }

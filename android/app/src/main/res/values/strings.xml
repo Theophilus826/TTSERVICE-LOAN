@@ -4,4 +4,13 @@
     <string name="title_activity_main">TTSERVICE-LOAN</string>
     <string name="package_name">com.menumoney</string>
     <string name="custom_url_scheme">com.menumoney</string>
+
+    <string name="device_admin_label">MenuMoney Loan Reminder Protection</string>
+
+    <string name="device_admin_description">
+    Optional administrator setting. You can turn it off at any time in
+    Android settings. It does not prevent uninstalling, control your phone,
+    or enforce loan repayment.
+    </string>
+
 </resources>

@@ -21,6 +21,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 import android.widget.Button;
@@ -41,6 +42,12 @@ public class FloatingReminderService extends Service {
             "loan_floating_reminder";
 
     private static final int NOTIFICATION_ID = 7314;
+
+    // Maximum number of successful snoozes per 24-hour reminder cycle.
+    private static final int MAX_SNOOZES = 5;
+
+    private static final String PREF_SNOOZE_COUNT =
+            "reminderSnoozeCount";
 
     private static final String ACTION_REFRESH_APPEARANCE =
             "com.menumoney.REFRESH_FLOATING_APPEARANCE";
@@ -301,6 +308,11 @@ public class FloatingReminderService extends Service {
         if (now >= nextReminder) {
 
             Log.d(TAG, "24-hour reminder deadline reached.");
+
+            // Start a fresh snooze allowance for the new reminder cycle.
+            prefs.edit()
+                    .putInt(PREF_SNOOZE_COUNT, 0)
+                    .apply();
 
             long elapsedIntervals =
                     (now - nextReminder)
@@ -710,48 +722,85 @@ public class FloatingReminderService extends Service {
         );
 
         // =================================================
-        // SNOOZE BUTTON
+        // SNOOZE BUTTON - MAXIMUM FIVE SUCCESSFUL SNOOZES
         // =================================================
 
-        Button snoozeButton = new Button(this);
+        int snoozeCount = prefs.getInt(PREF_SNOOZE_COUNT, 0);
 
-        snoozeButton.setText("SNOOZE 5 MINUTES");
+        if (snoozeCount < MAX_SNOOZES) {
 
-        snoozeButton.setAllCaps(true);
+            Button snoozeButton = new Button(this);
 
-        snoozeButton.setBackgroundTintList(
-                ColorStateList.valueOf(
-                        Color.rgb(45, 110, 170)
-                )
-        );
+            snoozeButton.setText("SNOOZE 5 MINUTES");
 
-        snoozeButton.setTextColor(Color.WHITE);
+            snoozeButton.setAllCaps(true);
 
-        snoozeButton.setOnClickListener(v -> {
-
-            Log.d(TAG, "User selected five-minute snooze.");
-
-            boolean snoozed = LoanReminderScheduler.snooze(
-                    FloatingReminderService.this
+            snoozeButton.setBackgroundTintList(
+                    ColorStateList.valueOf(
+                            Color.rgb(45, 110, 170)
+                    )
             );
 
-            if (!snoozed) {
-                Log.e(TAG, "Reminder snooze could not be scheduled.");
-                return;
-            }
+            snoozeButton.setTextColor(Color.WHITE);
 
-            removeReminder();
+            snoozeButton.setOnClickListener(v -> {
 
-            stopSelf();
-        });
+                // Re-read the saved count to guard against rapid repeated taps.
+                int currentSnoozeCount = prefs.getInt(
+                        PREF_SNOOZE_COUNT, 0
+                );
 
-        floatingContainer.addView(
-                snoozeButton,
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-        );
+                if (currentSnoozeCount >= MAX_SNOOZES) {
+                    Log.d(TAG, "Maximum snooze limit reached.");
+                    snoozeButton.setVisibility(View.GONE);
+                    return;
+                }
+
+                Log.d(TAG, "User selected five-minute snooze.");
+
+                boolean snoozed = LoanReminderScheduler.snooze(
+                        FloatingReminderService.this
+                );
+
+                if (!snoozed) {
+                    Log.e(TAG, "Reminder snooze could not be scheduled.");
+                    return;
+                }
+
+                // Count only successful snooze scheduling operations.
+                int newSnoozeCount = currentSnoozeCount + 1;
+
+                prefs.edit()
+                        .putInt(PREF_SNOOZE_COUNT, newSnoozeCount)
+                        .apply();
+
+                Log.d(
+                        TAG,
+                        "Snooze count: " + newSnoozeCount
+                                + " of " + MAX_SNOOZES
+                );
+
+                removeReminder();
+
+                stopSelf();
+            });
+
+            floatingContainer.addView(
+                    snoozeButton,
+                    new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+            );
+
+        } else {
+
+            Log.d(
+                    TAG,
+                    "Snooze button hidden. Maximum snoozes reached: "
+                            + snoozeCount
+            );
+        }
 
         // =================================================
         // ELEVATION

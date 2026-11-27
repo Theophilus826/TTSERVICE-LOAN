@@ -27,7 +27,8 @@ public class MainActivity extends BridgeActivity {
 
         // Calendar plugin is implemented in LoanCalendarPlugin.java.
         registerPlugin(LoanCalendarPlugin.class);
-
+        registerPlugin(LoanProtectionPlugin.class);
+        
         super.onCreate(savedInstanceState);
     }
 

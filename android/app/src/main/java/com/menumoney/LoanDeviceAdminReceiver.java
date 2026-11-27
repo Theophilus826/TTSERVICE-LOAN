@@ -1,5 +1,5 @@
 
-package com.menumoney.app;
+package com.menumoney;
 
 import android.app.admin.DeviceAdminReceiver;
 import android.content.Context;
@@ -13,8 +13,8 @@ public class LoanDeviceAdminReceiver extends DeviceAdminReceiver {
             Intent intent
     ) {
         return "You are disabling optional loan reminder protection. " +
-               "Your loan agreement, outstanding balance and " +
-               "repayment obligations remain unchanged.";
+                "Your loan agreement, outstanding balance and " +
+                "repayment obligations remain unchanged.";
     }
 
     @Override

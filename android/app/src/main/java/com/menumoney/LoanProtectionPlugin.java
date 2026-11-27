@@ -1,5 +1,5 @@
 
-package com.menumoney.app;
+package com.menumoney;
 
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
